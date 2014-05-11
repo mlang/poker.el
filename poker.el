@@ -253,8 +253,8 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
     (cond
      ((< value fold) 'fold)
      ((< value (+ fold call)) 'call)
-     ((< value (+ fold call raise)) 'raise))))
-
+     ((< value (+ fold call raise)) 'raise)
+     (t (error "Random FCR Error")))))
 
 (defun poker-make-player (name fcr-fn)
   (list (cons 'name name)
@@ -479,11 +479,9 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 
    ;; flop
    ((null board)
-    (sit-for 1)
     (dotimes (_ 3) (push (pop deck) board))
 
     (message "The flop: %s" (mapconcat #'poker-card-name board " "))
-    (sit-for 2)
 
     (dolist (player (cl-remove-if-not #'poker-player-active-p
 				      (poker-rotate-to-first button-player players)))
@@ -536,11 +534,9 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 
    ;; turn
    ((= (length board) 3)
-    (sit-for 1)
     (push (pop deck) board)
 
     (message "The turn: %s" (mapconcat #'poker-card-name board " "))
-    (sit-for 2)
 
     (setq min-bet (* min-bet 2))
 
@@ -684,38 +680,55 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
   (interactive (list (read-number "Initial stack: " 1000)
 		     (read-number "Minimum bet: " 50)
 		     (list (poker-make-player "Angela" #'poker-automatic-fcr)
-			   (poker-make-player "Betina" #'poker-automatic-fcr)
+			   (poker-make-player "Bettina" #'poker-automatic-fcr)
 			   (poker-make-player "Christina" #'poker-automatic-fcr)
 			   (poker-make-player "Daniela" #'poker-automatic-fcr)
 			   (poker-make-player "Emil" #'poker-automatic-fcr)
 			   (poker-make-player "Frank" #'poker-automatic-fcr)
-			   (poker-make-player "Günter" #'poker-automatic-fcr)
-			   (poker-make-player "Hannes" #'poker-automatic-fcr)
+			   (poker-make-player "Günther" #'poker-automatic-fcr)
+			   (poker-make-player "Harald" #'poker-automatic-fcr)
 			   (poker-make-player "Ingrid" #'poker-automatic-fcr)
 			   (poker-make-player (user-full-name) #'poker-interactive-fcr))))
   (cl-assert (> (length players) 1))
   (dolist (player players)
-    (message "%s receives %d chips." (poker-player-name player) 1000)
-    (setcdr (assq 'stack player) 1000))
+    (message "%s receives %d chips." (poker-player-name player) initial-stack)
+    (setcdr (assq 'stack player) initial-stack))
   (let ((button-player (nth (random (length players)) players))
 	(rounds ())
 	(losers ()))
-    (while (and button-player (< (length rounds) 4))
-      (message "Round %d." (1+ (length rounds)))
+    (while (and button-player (< (length rounds) 20))
+      (message "Round %d, %d players." (1+ (length rounds)) (length players))
       (push (poker-dealer min-bet (poker-random-deck) () button-player players)
 	    rounds)
+
       (mapc #'poker-player-fold players)
       (setq button-player
 	    (cadr (cl-remove-if (lambda (player) (zerop (poker-player-stack player)))
-			       (poker-rotate-to-first button-player players))))
+				(poker-rotate-to-first button-player players))))
       (let ((lost (cl-remove-if-not (lambda (player) (zerop (poker-player-stack player)))
 				    players)))
 	(when lost
-	  (setq players (cl-remove-if (lambda (player) (member player lost))
-				      players))))
-      (message "Remaining players: %s" (mapconcat #'poker-player-name (cl-sort players #'> :key #'poker-player-stack) " "))
+	  (setq players (cl-remove-if
+			 (lambda (player)
+			   (when (member player lost)
+			     (message "%s drops out." (poker-player-name player))
+			     t))
+			 players))
+	  (setq losers (nconc losers lost))))
+      (message "Remaining players: %s"
+	       (mapconcat (lambda (player) (format "%s (%d)"
+						   (poker-player-name player)
+						   (poker-player-stack player)))
+			  (cl-sort (append players nil)
+				   #'> :key #'poker-player-stack)
+			  " "))
       (when button-player
-	(setq players (poker-rotate-to-first button-player players))))
+	(cl-assert (member button-player players))
+	(let ((count (length players)))
+	  (setq players (poker-rotate-to-first button-player players))
+	  (cl-assert (= count (length players)))))
+
+      (accept-process-output))
 
     (cons players rounds)))
 
