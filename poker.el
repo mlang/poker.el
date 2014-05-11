@@ -334,11 +334,11 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 (defun poker-next-player (player players)
   (car (poker-next-players player players)))
 
-(defun poker-current-wager (players)
-  (apply #'max (mapcar #'poker-player-wagered players)))
-
 (defun poker-pot (players)
   (apply #'+ (mapcar #'poker-player-wagered players)))
+
+(defun poker-current-wager (players)
+  (apply #'max (mapcar #'poker-player-wagered players)))
 
 (defun poker-collect-wager (amount players)
   (let ((total 0))
@@ -366,29 +366,6 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	   (leftover (- total (* each (length winners)))))
       (poker-player-payout (car winners) (+ each leftover))
       (dolist (player (cdr winners)) (poker-player-payout winner each)))))
-
-(defun poker-showdown (players board)
-  (let ((in-play (cl-remove-if-not #'poker-player-active-p players)))
-    (cl-assert (not (null in-play)))
-    (while (> (length in-play) 1)
-      (if (= (length in-play) 1)
-	  (progn
-	    (poker-distribute-winnings in-play players)
-	    (setq in-play nil))
-	(let* ((best-hand-value (poker-hand-value
-				 (car
-				  (poker-sort-hands (mapcar (lambda (player)
-							      (poker-player-best-hand
-							       player board))
-							    in-play)))))
-	       (winners (cl-remove-if (lambda (player)
-					(< (poker-hand-value
-					    (poker-player-best-hand
-					     player board))
-					   best-hand-value))
-				      in-play)))
-	  (poker-distribute-winnings winners players))
-	(setq in-play (cl-remove-if-not #'poker-player-active-p players))))))
 
 (defun poker-game (initial-stack small-blind big-blind &rest players)
   (cl-assert (> (length players) 1))
@@ -441,7 +418,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
       (incf round))
     players))
 
-(defun poker-game-play (small-blind big-blind deck board button-player players)
+(defun poker-dealer (small-blind big-blind deck board button-player players)
   (cond
    ;; pre-flop
    ((and (null board) (zerop (poker-pot players)))
@@ -474,7 +451,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 				(poker-player-bet (cadr blinds) amount-to-call)))
 	 ((eq decision 'raise) (poker-player-bet (cadr blinds) (+ amount-to-call 10)))
 	 ((eq decision 'fold) (poker-player-fold (cadr blinds)))))
-      (poker-game-play small-blind big-blind deck board button-player players)))
+      (poker-dealer small-blind big-blind deck board button-player players)))
 
    ;; All but one have folded
    ((and (not (zerop (poker-pot players)))
@@ -485,19 +462,22 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
    
    ;; pre-flop, second round of bets, no raises allowed
    ((and (null board) (cl-remove-if (lambda (player) (or (zerop (poker-player-wagered player))
+							 (not (poker-player-pocket player))
 							 (= (poker-player-wagered player)
 							    (poker-current-wager players))))
 				    (poker-next-players
 				     (poker-next-player button-player players)
 				     players)))
-    (dolist (player (cl-remove-if (lambda (player) (or (zerop (poker-player-wagered player))
-						       (= (poker-player-wagered player)
-							  (poker-current-wager players))))
-				  (poker-next-players
-				   (poker-next-player button-player players)
-				   players)))
-	(let* ((amount-to-call (- (poker-current-wager players)
-				  (poker-player-wagered player)))
+    (dolist (player (cl-remove-if
+		     (lambda (player)
+		       (or (zerop (poker-player-wagered player))
+			   (not (poker-player-pocket player))
+			   (= (poker-player-wagered player)
+			      (poker-current-wager players))))
+		     (poker-next-players (poker-next-player button-player players)
+					 players)))
+      (let* ((amount-to-call (- (poker-current-wager players)
+				(poker-player-wagered player)))
 	       (decision (poker-player-fcr player (poker-pot players)
 					   amount-to-call board)))
 	  (message "%s wants to %S" (poker-player-name player) decision)
@@ -509,7 +489,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	    (when (> amount-to-call 0)
 	      (poker-player-bet player amount-to-call)))
 	   ((eq decision 'fold) (poker-player-fold player)))))
-    (poker-game-play small-blind big-blind deck board button-player players))
+    (poker-dealer small-blind big-blind deck board button-player players))
 
    ;; flop
    ((null board)
@@ -530,7 +510,165 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	  (poker-player-bet player (+ amount-to-call 10)))
 	 ((eq decision 'fold) (poker-player-fold player)))))
 
-    (poker-game-play small-blind big-blind deck board button-player players))
+    (poker-dealer small-blind big-blind deck board button-player players))
+
+   ;; flop, second round of bets, no raises allowed
+   ((and (= (length board) 3) (cl-remove-if
+			       (lambda (player)
+				 (or (not (poker-player-active-p player))
+				     (= (poker-player-wagered player)
+					(poker-current-wager players))))
+			       (poker-rotate-to-first button-player players)))
+    (dolist (player (cl-remove-if
+			       (lambda (player)
+				 (or (not (poker-player-active-p player))
+				     (= (poker-player-wagered player)
+					(poker-current-wager players))))
+			       (poker-rotate-to-first button-player players)))
+      (let* ((amount-to-call (- (poker-current-wager players)
+				(poker-player-wagered player)))
+	     (decision (poker-player-fcr player (poker-pot players)
+					 amount-to-call board)))
+	(message "%s wants to %S" (poker-player-name player) decision)
+	(cond
+	 ((eq decision 'call) (when (> amount-to-call 0)
+				(poker-player-bet player amount-to-call)))
+	 ((eq decision 'raise)
+	  (message "no raise allowed, %s is calling." (poker-player-name player))
+	  (when (> amount-to-call 0)
+	    (poker-player-bet player amount-to-call)))
+	 ((eq decision 'fold) (poker-player-fold player)))))
+
+    (poker-dealer small-blind big-blind deck board button-player players))
+
+   ;; turn
+   ((= (length board) 3)
+    (push (pop deck) board)
+
+    (dolist (player (cl-remove-if-not #'poker-player-active-p
+				      (poker-rotate-to-first button-player players)))
+      (let* ((amount-to-call (- (poker-current-wager players)
+				(poker-player-wagered player)))
+	     (decision (poker-player-fcr player (poker-pot players)
+					 amount-to-call board)))
+	(message "%s %S" (poker-player-name player) decision)
+	(cond
+	 ((eq decision 'call) (when (> amount-to-call 0)
+				(poker-player-bet player amount-to-call)))
+	 ((eq decision 'raise)
+	  (message "%s raises by 10." (poker-player-name player))
+	  (poker-player-bet player (+ amount-to-call 10)))
+	 ((eq decision 'fold) (poker-player-fold player)))))
+
+    (poker-dealer small-blind big-blind deck board button-player players))
+
+   ;; turn, second round of bets, no raises allowed
+   ((and (= (length board) 4) (cl-remove-if
+			       (lambda (player)
+				 (or (not (poker-player-active-p player))
+				     (= (poker-player-wagered player)
+					(poker-current-wager players))))
+			       (poker-rotate-to-first button-player players)))
+    (dolist (player (cl-remove-if
+		     (lambda (player)
+		       (or (not (poker-player-active-p player))
+			   (= (poker-player-wagered player)
+			      (poker-current-wager players))))
+		     (poker-rotate-to-first button-player players)))
+      (let* ((amount-to-call (- (poker-current-wager players)
+				(poker-player-wagered player)))
+	     (decision (poker-player-fcr player (poker-pot players)
+					 amount-to-call board)))
+	(message "%s wants to %S" (poker-player-name player) decision)
+	(cond
+	 ((eq decision 'call) (when (> amount-to-call 0)
+				(poker-player-bet player amount-to-call)))
+	 ((eq decision 'raise)
+	  (message "no raise allowed, %s is calling." (poker-player-name player))
+	  (when (> amount-to-call 0)
+	    (poker-player-bet player amount-to-call)))
+	 ((eq decision 'fold) (poker-player-fold player)))))
+
+    (poker-dealer small-blind big-blind deck board button-player players))
+
+   ;; river
+   ((= (length board) 4)
+    (push (pop deck) board)
+
+    (dolist (player (cl-remove-if-not #'poker-player-active-p
+				      (poker-rotate-to-first button-player players)))
+      (let* ((amount-to-call (- (poker-current-wager players)
+				(poker-player-wagered player)))
+	     (decision (poker-player-fcr player (poker-pot players)
+					 amount-to-call board)))
+	(message "%s %S" (poker-player-name player) decision)
+	(cond
+	 ((eq decision 'call) (when (> amount-to-call 0)
+				(poker-player-bet player amount-to-call)))
+	 ((eq decision 'raise)
+	  (message "%s raises by 10." (poker-player-name player))
+	  (poker-player-bet player (+ amount-to-call 10)))
+	 ((eq decision 'fold) (poker-player-fold player)))))
+
+    (poker-dealer small-blind big-blind deck board button-player players))
+
+   ;; river, second round of bets, no raises allowed
+   ((and (= (length board) 5) (cl-remove-if
+			       (lambda (player)
+				 (or (not (poker-player-active-p player))
+				     (= (poker-player-wagered player)
+					(poker-current-wager players))))
+			       (poker-rotate-to-first button-player players)))
+    (dolist (player (cl-remove-if
+		     (lambda (player)
+		       (or (not (poker-player-active-p player))
+			   (= (poker-player-wagered player)
+			      (poker-current-wager players))))
+		     (poker-rotate-to-first button-player players)))
+      (let* ((amount-to-call (- (poker-current-wager players)
+				(poker-player-wagered player)))
+	     (decision (poker-player-fcr player (poker-pot players)
+					 amount-to-call board)))
+	(message "%s wants to %S" (poker-player-name player) decision)
+	(cond
+	 ((eq decision 'call) (when (> amount-to-call 0)
+				(poker-player-bet player amount-to-call)))
+	 ((eq decision 'raise)
+	  (message "no raise allowed, %s is calling." (poker-player-name player))
+	  (when (> amount-to-call 0)
+	    (poker-player-bet player amount-to-call)))
+	 ((eq decision 'fold) (poker-player-fold player)))))
+
+    (poker-dealer small-blind big-blind deck board button-player players))
+
+   ;; showdown
+   ((= (length board) 5)
+    (cl-assert (not (zerop (poker-pot players))))
+    (let ((in-play (cl-remove-if-not #'poker-player-active-p players))
+	  (groups ()))
+      (cl-assert (> (length in-play) 1))
+      (while (> (length in-play) 1)
+	(if (= (length in-play) 1)
+	    (progn
+	      (poker-distribute-winnings in-play players)
+	      (push in-play groups)
+	      (setq in-play nil))
+	  (let* ((best-hand-value (poker-hand-value
+				   (car
+				    (poker-sort-hands
+				     (mapcar (lambda (player)
+					       (poker-player-best-hand player board))
+					     in-play)))))
+		 (winners (cl-remove-if (lambda (player)
+					  (< (poker-hand-value
+					      (poker-player-best-hand player board))
+					     best-hand-value))
+					in-play)))
+	    (poker-distribute-winnings winners players)
+	    (push winners groups))
+	  (setq in-play (cl-remove-if-not #'poker-player-active-p players))))
+
+      (nreverse groups)))
 
    (t (list 'error small-blind big-blind deck board button-player players))))
 
