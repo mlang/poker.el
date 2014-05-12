@@ -24,13 +24,19 @@
 
 ;; A collection of poker related functions.
 
-;;; Code:
+;;; Requires:
 
 (require 'cl-lib)
 (require 'cookie1)
+(require 'ert)
+
+;;; Constants:
 
 (defconst poker-ranks '(2 3 4 5 6 7 8 9 10 jack queen king ace))
 (defconst poker-suits '(clubs diamonds hearts spades))
+(defconst poker-deck (cl-loop for card from 0 to 51 collect card))
+
+;;; Code:
 
 (defsubst poker-make-card (rank suit)
   (cl-assert (memq rank poker-ranks))
@@ -50,6 +56,7 @@
   (concat (aref ["2" "3" "4" "5" "6" "7" "8" "9" "T" "J" "Q" "K" "A"]
 		(poker-card-rank card))
 	  (aref ["c" "d" "h" "s"] (poker-card-suit card))))
+
 (defun poker-hand-value (hand)
   "Calculate the value of a given 5 card poker HAND.
 The result is a 24 bit integer where the leftmost 4 bits (0-8) indicate the type
@@ -99,7 +106,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 
 (defun poker-rank-value-name (rank-value)
   (let ((rank-value-names ["2" "3" "4" "5" "6" "7" "8" "9" "10"
-			   "Jack" "Queen" "King" "Ace"]))
+			   "jack" "queen" "king" "ace"]))
     (aref rank-value-names rank-value)))
 
 (defun poker-rank-value-name-plural (rank-value)
@@ -107,77 +114,52 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 
 (defun poker-describe-hand (hand)
   (cl-assert (eq (length hand) 5))
-  (pcase (poker-hand-value hand)
-    (`(8 ,high) (pcase high
-		  (12 "Royal flush")
-		  (_ (format "%s high straight flush"
-			     (poker-rank-value-name high)))))
-    (`(7 ,rank ,high) (format "Four %s, %s high"
-			      (poker-rank-value-name-plural rank)
-			      (poker-rank-value-name high)))
-    (`(6 ,three ,two) (format "Full house, %s and %s"
-			      (poker-rank-value-name-plural three)
-			      (poker-rank-value-name-plural two)))
-    (`(5 ,high ,_ ,_ ,_ ,_) (format "%s high flush"
+  (pcase (let ((v (poker-hand-value hand)))
+	   (cl-loop for i from 5 downto 0 collect (logand (ash v (- (* i 4))) #xf)))
+    (`(8 ,high ,_ ,_ ,_ ,_) (pcase high
+			      (12 "royal flush")
+			      (_ (format "%s high straight flush"
+					 (poker-rank-value-name high)))))
+    (`(7 ,four ,high 0 0 0) (format "four %s, %s high"
+				    (poker-rank-value-name-plural four)
 				    (poker-rank-value-name high)))
-    (`(4 ,high) (pcase high
-		  (3 "5 high straight (steel wheel)")
-		  (_ (format "%s high straight" (poker-rank-value-name high)))))
-    (`(3 ,three ,high ,_) (format "Three %s, %s high"
-				  (poker-rank-value-name-plural three)
-				  (poker-rank-value-name high)))
-    (`(2 ,two1 ,two2 ,high) (format "Two pairs of %s and %s, %s high"
+    (`(6 ,three ,two 0 0 0) (format "full house of %s and %s"
+				    (poker-rank-value-name-plural three)
+				    (poker-rank-value-name-plural two)))
+    (`(5 ,high ,k1 ,k2 ,k3 ,k4) (format "%s high flush, %s %s %s and %s kickers"
+					(poker-rank-value-name high)
+					(poker-rank-value-name k1)
+					(poker-rank-value-name k2)
+					(poker-rank-value-name k3)
+					(poker-rank-value-name k4)))
+    (`(4 ,high ,_ ,_ ,_ ,_) (pcase high
+			      (3 "5 high straight (steel wheel)")
+			      (_ (format "%s high straight" (poker-rank-value-name high)))))
+    (`(3 ,three ,high ,kicker 0 0) (format "three %s, %s high, %s kicker"
+					   (poker-rank-value-name-plural three)
+					   (poker-rank-value-name high)
+					   (poker-rank-value-name kicker)))
+    (`(2 ,two1 ,two2 ,high 0 0) (format "wwo pairs of %s and %s, %s high"
 				    (poker-rank-value-name-plural two1)
 				    (poker-rank-value-name-plural two2)
 				    (poker-rank-value-name high)))
-    (`(1 ,two ,high ,_ ,_) (format "One pair of %s, %s high"
-				    (poker-rank-value-name-plural two)
-				   (poker-rank-value-name high)))
-    (`(0 ,high ,k1 ,k2 ,k3 ,k4) (format "High card %s, %s %s %s %s kickers"
+    (`(1 ,two ,high ,k1 ,k2 0) (format "a pair of %s, %s high, %s and %s kickers"
+				       (poker-rank-value-name-plural two)
+				       (poker-rank-value-name high)
+				       (poker-rank-value-name k1)
+				       (poker-rank-value-name k2)))
+    (`(0 ,high ,k1 ,k2 ,k3 ,k4) (format "high card %s, %s %s %s and %s kickers"
 					(poker-rank-value-name high)
 					(poker-rank-value-name k1)
 					(poker-rank-value-name k2)
 					(poker-rank-value-name k3)
 					(poker-rank-value-name k4)))))
 
-(defconst poker-full-deck (cl-loop for card from 0 to 51 collect card))
-
 (defun poker-random-deck ()
-  (append (cookie-shuffle-vector (apply 'vector poker-full-deck)) nil))
+  (append (cookie-shuffle-vector (apply 'vector poker-deck)) nil))
 
-(defun poker-simulate-holdem-showdown (player-count)
-  (cl-assert (<= player-count 22))
-  (let ((deck (poker-random-deck))
-	(players (make-vector player-count nil))
-	(board ()))
-    (dotimes (cards 2)
-      (dotimes (player player-count)
-	(push (pop deck) (aref players player))))
-    (pop deck)
-    (dotimes (cards 3) (push (pop deck) board))
-    (pop deck)
-    (push (pop deck) board)
-    (pop deck)
-    (push (pop deck) board)
-
-    (poker-sort-hands
-     (mapcar (lambda (pocket) (poker-best-hand (append pocket board)))
-	     players))))
-
-(defun poker-test-hand-frequencies (rounds players)
-  (let ((scores ()))
-    (dotimes (_ rounds)
-      (dolist (hand (poker-simulate-holdem-showdown players))
-	(let ((value (poker-hand-value hand)))
-	  (let ((elem (assoc value scores)))
-	    (if elem
-		(cl-incf (cdr elem))
-	      (setq scores (append (list (cons value 1)) scores)))))))
-    (sort scores
-	  (lambda (lhs rhs) (not (version-list-< (car lhs) (car rhs)))))))
-
-(defun poker-pocket-strength (pocket &optional community opponents)
-  (let ((wins 0) (iterations 200))
+(defun poker-strength (pocket &optional community opponents)
+  (let ((wins 0) (iterations 100))
     (dotimes (i iterations)
       (let ((deck (poker-random-deck))
 	    (players (make-vector (or opponents 1) nil)))
@@ -206,7 +188,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
     (dolist (rank1 poker-ranks)
       (dolist (rank2 poker-ranks)
 	(if (eq rank1 rank2)
-	  (push (cons (poker-pocket-strength (list (poker-make-card rank1 'clubs)
+	  (push (cons (poker-strength (list (poker-make-card rank1 'clubs)
 						   (poker-make-card rank2 'hearts))
 					     nil opponents)
 		      (if (memq rank1 '(2 3 4 5 6 7 8 9))
@@ -232,11 +214,11 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 		(accept-process-output)
 		(message "%S" code)
 		(push (cons (if suited
-				(poker-pocket-strength
+				(poker-strength
 				 (list (poker-make-card rank1 'clubs)
 				       (poker-make-card rank2 'clubs))
 				 nil opponents)
-			      (poker-pocket-strength
+			      (poker-strength
 			       (list (poker-make-card rank1 'clubs)
 				     (poker-make-card rank2 'hearts))
 			       nil opponents))
@@ -245,15 +227,15 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
     (cl-sort hands #'> :key #'car)))
 
 (defun poker-pot-odds (bet pot)
-  (/ (float bet) (+ bet pot)))
+  (/ (float bet) (+ pot bet)))
 
-(defun poker-fold-call-raise (fold call raise)
-  (cl-assert (= (+ fold call raise) 100))
+(defun poker-random-fold-call-raise (fold% call% raise%)
+  (cl-assert (= (+ fold% call% raise%) 100))
   (let ((value (random 100)))
     (cond
-     ((< value fold) 'fold)
-     ((< value (+ fold call)) 'call)
-     ((< value (+ fold call raise)) 'raise)
+     ((< value fold%) 'fold)
+     ((< value (+ fold% call%)) 'call)
+     ((< value (+ fold% call% raise%)) 'raise)
      (t (error "Random FCR Error")))))
 
 (defun poker-make-player (name fcr-fn)
@@ -271,9 +253,14 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 
 (defun poker-player-bet (player amount)
   (let ((actual (min (poker-player-stack player) amount)))
-    (cl-assert (> actual 0))
-    (cl-decf (cdr (assq 'stack player)) actual)
-    (cl-incf (cdr (assq 'wagered player)) actual)
+    (when (zerop actual) (message "WARNING: Actual is 0."))
+    (message "%s: %d - %d == %d"
+	     (poker-player-name player)
+	     (poker-player-stack player) actual
+	     (- (poker-player-stack player) actual))
+    (unless (zerop actual)
+      (cl-decf (cdr (assq 'stack player)) actual)
+      (cl-incf (cdr (assq 'wagered player)) actual))
     actual))
 
 (defun poker-player-payout (player amount)
@@ -295,7 +282,12 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 (defun poker-player-all-in-p (player)
   (and (poker-player-active-p player) (zerop (poker-player-stack player))))
 
+(defun poker-player-can-bet-p (player)
+  (and (poker-player-pocket player) (> (poker-player-stack player) 0)))
+
 (defun poker-player-best-hand (player community)
+  (cl-assert (>= (length (poker-player-pocket player)) 2))
+  (cl-assert (>= (length community) 3))
   (poker-best-hand (append (poker-player-pocket player) community)))
 
 (defun poker-player-give-card (player card)
@@ -305,10 +297,10 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 (defun poker-player-fcr-fn (player)
   (cdr (assq 'fcr-fn player)))
 
-(defun poker-player-fcr (player pot due board &optional opponents)
+(defun poker-player-fcr (player pot due board opponents)
   (funcall (poker-player-fcr-fn player) player pot due board opponents))
 
-(defun poker-interactive-fcr (player pot due board &optional opponents)
+(defun poker-interactive-fcr (player pot due board opponents)
   (let ((char nil))
     (while (not (memq char '(?c ?f ?r)))
       (setq char (read-char
@@ -320,14 +312,14 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
     (cdr (assq char '((?c . call) (?f . fold) (?r . raise))))))
 
 (defun poker-automatic-fcr (player pot due board &optional opponents)
-  (let* ((strength (poker-pocket-strength (poker-player-pocket player) board opponents))
+  (let* ((strength (poker-strength (poker-player-pocket player) board opponents))
 	 (pot-odds (poker-pot-odds due pot))
 	 (rate-of-return (/ strength pot-odds))
 	 (action (cond
-		  ((< rate-of-return 0.8) (poker-fold-call-raise 95 1 4))
-		  ((< rate-of-return 1.0) (poker-fold-call-raise 80 15 5))
-		  ((< rate-of-return 1.3) (poker-fold-call-raise 0 60 40))
-		  (t (poker-fold-call-raise 0 25 75)))))
+		  ((< rate-of-return 0.8) (poker-random-fold-call-raise 95 1 4))
+		  ((< rate-of-return 1.0) (poker-random-fold-call-raise 80 15 5))
+		  ((< rate-of-return 1.3) (poker-random-fold-call-raise 0 60 40))
+		  (t (poker-random-fold-call-raise 0 25 75)))))
     (when (and (memq action '(call raise))
 	       (< (- (poker-player-stack player) due) 200) (< strength 0.5))
       (setq action 'fold))
@@ -335,11 +327,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
       (setq action 'call))
     (when (and (zerop due) (eq action 'fold))
       (setq action 'call))
-    (message "%f/%f==%f, %S" strength pot-odds rate-of-return action)
     action))
-
-(defun poker-count-active-players (players)
-  (cl-count 0 players :test #'< :key #'poker-player-stack))
 
 (defun poker-rotate-to-first (player players)
   (let ((position (cl-position player players)))
@@ -385,13 +373,20 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
       (dolist (player (cdr winners)) (poker-player-payout player each))
       total)))
 
-(defun poker-dealer (min-bet deck board button-player players)
+(defun poker-player-max-raise (player players)
+  (let ((other-stacks (mapcar #'poker-player-stack
+			      (cl-remove
+			       player
+			       (cl-remove-if-not #'poker-player-can-bet-p players)))))
+    (min (poker-player-stack player) (if other-stacks (apply #'max other-stacks) 0))))
+
+(defun poker-dealer (min-bet deck board players)
   "Deal a round of texas holdem poker for PLAYERS."
   (cl-assert (> (length players) 1))
   (cond
    ;; pre-flop
    ((and (null board) (zerop (poker-pot players)))
-    (let ((blinds (poker-rotate-to-first button-player players)))
+    (let ((blinds players))
       (message "Collecting blinds.")
       (poker-player-bet (car blinds) (/ min-bet 2))
       (poker-player-bet (cadr blinds) min-bet)
@@ -400,37 +395,49 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	(dolist (player players) (poker-player-give-card player (pop deck))))
 
       (message "Initial betting round.")
+
       (dolist (player (poker-next-players (cadr blinds) players))
-	(let* ((amount-to-call (- (poker-current-wager players)
+
+	(unless (zerop (poker-player-stack player))
+	  (let* ((max-raise (poker-player-max-raise player players))
+		 (amount-to-call (- (poker-current-wager players)
 				  (poker-player-wagered player)))
+		 (opponents (1- (length (cl-remove-if-not #'poker-player-pocket
+							players))))
+		 (decision (poker-player-fcr player (poker-pot players)
+					     amount-to-call board opponents)))
+	    (message "%s %S" (poker-player-name player) decision)
+	    (cond
+	     ((eq decision 'call) (when (> amount-to-call 0)
+				    (poker-player-bet player amount-to-call)))
+	     ((eq decision 'raise)
+	      (message "%s raises by %d."
+		       (poker-player-name player)
+		       (min max-raise min-bet))
+	      (poker-player-bet player (min max-raise (+ amount-to-call min-bet))))
+	     ((eq decision 'fold) (poker-player-fold player))))))
+
+      (when (and (not (zerop (poker-player-stack (cadr blinds))))
+		 (or (> (length (cl-remove-if-not #'poker-player-can-bet-p players)) 1)
+		     (< (poker-player-wagered (cadr blinds))
+			(poker-current-wager players))))
+	(let* ((amount-to-call (- (poker-current-wager players)
+				  (poker-player-wagered (cadr blinds))))
 	       (opponents (1- (length (cl-remove-if-not #'poker-player-pocket
 							players))))
-	       (decision (poker-player-fcr player (poker-pot players)
+	       (decision (poker-player-fcr (cadr blinds) (poker-pot players)
 					   amount-to-call board opponents)))
-	  (message "%s %S" (poker-player-name player) decision)
+	  (message "%s %S" (poker-player-name (cadr blinds)) decision)
 	  (cond
-	   ((eq decision 'call) (when (> amount-to-call 0)
-				  (poker-player-bet player amount-to-call)))
-	   ((eq decision 'raise)
-	    (message "%s raises by %d." (poker-player-name player) min-bet)
-	    (poker-player-bet player (+ amount-to-call min-bet)))
-	   ((eq decision 'fold) (poker-player-fold player)))))
-
-      (let* ((amount-to-call (- (poker-current-wager players)
-				(poker-player-wagered (cadr blinds))))
-	     (decision (poker-player-fcr (cadr blinds) (poker-pot players)
-					 amount-to-call board)))
-	(message "%s %S" (poker-player-name (cadr blinds)) decision)
-	(cond
 	 ((eq decision 'call)
 	  (when (> amount-to-call 0)
 	    (poker-player-bet (cadr blinds) amount-to-call)))
 	 ((eq decision 'raise)
 	  (poker-player-bet (cadr blinds) (+ amount-to-call min-bet)))
 	 ((eq decision 'fold)
-	  (poker-player-fold (cadr blinds)))))
+	  (poker-player-fold (cadr blinds))))))
 
-      (poker-dealer min-bet deck board button-player players)))
+      (poker-dealer min-bet deck board players)))
 
    ;; All but one have folded
    ((and (not (zerop (poker-pot players)))
@@ -442,13 +449,14 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
       winners))
    
    ;; pre-flop, second round of bets, no raises allowed
-   ((and (null board) (cl-remove-if (lambda (player) (or (zerop (poker-player-wagered player))
-							 (not (poker-player-pocket player))
-							 (= (poker-player-wagered player)
-							    (poker-current-wager players))))
-				    (poker-next-players
-				     (poker-next-player button-player players)
-				     players)))
+   ((and (null board) (cl-remove-if
+		       (lambda (player)
+			 (or (zerop (poker-player-wagered player))
+			     (not (poker-player-pocket player))
+			     (poker-player-all-in-p player)
+			     (= (poker-player-wagered player)
+				(poker-current-wager players))))
+		       (poker-rotate-to-first (cadr players) players)))
 
     (message "Pre flop, second round of bets.")
 
@@ -456,11 +464,13 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 		     (lambda (player)
 		       (or (zerop (poker-player-wagered player))
 			   (not (poker-player-pocket player))
+			   (poker-player-all-in-p player)
 			   (= (poker-player-wagered player)
 			      (poker-current-wager players))))
-		     (poker-next-players (poker-next-player button-player players)
-					 players)))
-      (let* ((amount-to-call (- (poker-current-wager players)
+		     (poker-rotate-to-first (cadr players) players)))
+      (when (or (> (length (cl-remove-if-not #'poker-player-can-bet-p players)) 1)
+		(< (poker-player-wagered player) (poker-current-wager players)))
+	(let* ((amount-to-call (- (poker-current-wager players)
 				(poker-player-wagered player)))
 	     (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
 	     (decision (poker-player-fcr player (poker-pot players)
@@ -473,9 +483,9 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	    (message "no raise allowed, calling." (poker-player-name player))
 	    (when (> amount-to-call 0)
 	      (poker-player-bet player amount-to-call)))
-	   ((eq decision 'fold) (poker-player-fold player)))))
+	   ((eq decision 'fold) (poker-player-fold player))))))
 
-    (poker-dealer min-bet deck board button-player players))
+    (poker-dealer min-bet deck board players))
 
    ;; flop
    ((null board)
@@ -483,38 +493,40 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 
     (message "The flop: %s" (mapconcat #'poker-card-name board " "))
 
-    (dolist (player (cl-remove-if-not #'poker-player-active-p
-				      (poker-rotate-to-first button-player players)))
-      (let* ((amount-to-call (- (poker-current-wager players)
-				(poker-player-wagered player)))
-	     (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
-	     (decision (poker-player-fcr player (poker-pot players)
-					 amount-to-call board opponents)))
+    (dolist (player (cl-remove-if-not #'poker-player-can-bet-p players))
+      (when (or (> (length (cl-remove-if-not #'poker-player-can-bet-p players)) 1)
+		(< (poker-player-wagered player) (poker-current-wager players)))
+	(let* ((max-raise (poker-player-max-raise player players))
+	       (amount-to-call (- (poker-current-wager players)
+				  (poker-player-wagered player)))
+	       (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
+	       (decision (poker-player-fcr player (poker-pot players)
+					   amount-to-call board opponents)))
 	(message "%s %S" (poker-player-name player) decision)
 	(cond
 	 ((eq decision 'call) (when (> amount-to-call 0)
 				(poker-player-bet player amount-to-call)))
 	 ((eq decision 'raise)
 	  (message "%s raises by %d." (poker-player-name player) min-bet)
-	  (poker-player-bet player (+ amount-to-call min-bet)))
-	 ((eq decision 'fold) (poker-player-fold player)))))
+	  (poker-player-bet player (min (+ amount-to-call min-bet) max-raise)))
+	 ((eq decision 'fold) (poker-player-fold player))))))
 
-    (poker-dealer min-bet deck board button-player players))
+    (poker-dealer min-bet deck board players))
 
    ;; flop, second round of bets, no raises allowed
    ((and (= (length board) 3) (cl-remove-if
 			       (lambda (player)
-				 (or (not (poker-player-active-p player))
+				 (or (not (poker-player-can-bet-p player))
 				     (= (poker-player-wagered player)
 					(poker-current-wager players))))
-			       (poker-rotate-to-first button-player players)))
+			       players))
     (message "The flop, second round of bets.")
     (dolist (player (cl-remove-if
-			       (lambda (player)
-				 (or (not (poker-player-active-p player))
-				     (= (poker-player-wagered player)
-					(poker-current-wager players))))
-			       (poker-rotate-to-first button-player players)))
+		     (lambda (player)
+		       (or (not (poker-player-can-bet-p player))
+			   (= (poker-player-wagered player)
+			      (poker-current-wager players))))
+		     players))
       (let* ((amount-to-call (- (poker-current-wager players)
 				(poker-player-wagered player)))
 	     (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
@@ -530,7 +542,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	    (poker-player-bet player amount-to-call)))
 	 ((eq decision 'fold) (poker-player-fold player)))))
 
-    (poker-dealer min-bet deck board button-player players))
+    (poker-dealer min-bet deck board players))
 
    ;; turn
    ((= (length board) 3)
@@ -540,38 +552,40 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 
     (setq min-bet (* min-bet 2))
 
-    (dolist (player (cl-remove-if-not #'poker-player-active-p
-				      (poker-rotate-to-first button-player players)))
-      (let* ((amount-to-call (- (poker-current-wager players)
-				(poker-player-wagered player)))
-	     (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
-	     (decision (poker-player-fcr player (poker-pot players)
-					 amount-to-call board opponents)))
-	(message "%s %S" (poker-player-name player) decision)
-	(cond
-	 ((eq decision 'call) (when (> amount-to-call 0)
-				(poker-player-bet player amount-to-call)))
-	 ((eq decision 'raise)
-	  (message "%s raises by %d." (poker-player-name player) min-bet)
-	  (poker-player-bet player (+ amount-to-call min-bet)))
-	 ((eq decision 'fold) (poker-player-fold player)))))
+    (dolist (player (cl-remove-if-not #'poker-player-can-bet-p players))
+      (when (or (> (length (cl-remove-if-not #'poker-player-can-bet-p players)) 1)
+		(< (poker-player-wagered player) (poker-current-wager players)))
+	(let* ((max-raise (poker-player-max-raise player players))
+	       (amount-to-call (- (poker-current-wager players)
+				  (poker-player-wagered player)))
+	       (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
+	       (decision (poker-player-fcr player (poker-pot players)
+					   amount-to-call board opponents)))
+	  (message "%s %S" (poker-player-name player) decision)
+	  (cond
+	   ((eq decision 'call) (when (> amount-to-call 0)
+				  (poker-player-bet player amount-to-call)))
+	   ((eq decision 'raise)
+	    (message "%s raises by %d." (poker-player-name player) min-bet)
+	    (poker-player-bet player (min max-raise (+ amount-to-call min-bet))))
+	   ((eq decision 'fold) (poker-player-fold player))))))
 
-    (poker-dealer min-bet deck board button-player players))
+    (poker-dealer min-bet deck board players))
 
    ;; turn, second round of bets, no raises allowed
    ((and (= (length board) 4) (cl-remove-if
 			       (lambda (player)
-				 (or (not (poker-player-active-p player))
+				 (or (not (poker-player-can-bet-p player))
 				     (= (poker-player-wagered player)
 					(poker-current-wager players))))
-			       (poker-rotate-to-first button-player players)))
+			       players))
     (message "The turn, second round of bets.")
     (dolist (player (cl-remove-if
 		     (lambda (player)
-		       (or (not (poker-player-active-p player))
+		       (or (not (poker-player-can-bet-p player))
 			   (= (poker-player-wagered player)
 			      (poker-current-wager players))))
-		     (poker-rotate-to-first button-player players)))
+		     players))
       (let* ((amount-to-call (- (poker-current-wager players)
 				(poker-player-wagered player)))
 	     (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
@@ -587,18 +601,20 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	    (poker-player-bet player amount-to-call)))
 	 ((eq decision 'fold) (poker-player-fold player)))))
 
-    (poker-dealer min-bet deck board button-player players))
+    (poker-dealer min-bet deck board players))
 
    ;; river
    ((= (length board) 4)
     (push (pop deck) board)
     (message "The river: %s" (mapconcat #'poker-card-name board " "))
 
-    (dolist (player (cl-remove-if-not #'poker-player-active-p
-				      (poker-rotate-to-first button-player players)))
-      (let* ((amount-to-call (- (poker-current-wager players)
-				(poker-player-wagered player)))
-	     (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
+    (dolist (player (cl-remove-if-not #'poker-player-can-bet-p players))
+      (when (or (> (length (cl-remove-if-not #'poker-player-can-bet-p players)) 1)
+		(< (poker-player-wagered player) (poker-current-wager players)))
+	(let* ((max-raise (poker-player-max-raise player players))
+	       (amount-to-call (- (poker-current-wager players)
+				  (poker-player-wagered player)))
+	       (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
 	     (decision (poker-player-fcr player (poker-pot players)
 					 amount-to-call board opponents)))
 	(message "%s %S" (poker-player-name player) decision)
@@ -606,30 +622,32 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	 ((eq decision 'call) (when (> amount-to-call 0)
 				(poker-player-bet player amount-to-call)))
 	 ((eq decision 'raise)
-	  (message "%s raises by %d." (poker-player-name player) min-bet)
+	  (message "%s raises by %d." (poker-player-name player) (min max-raise min-bet))
 	  (poker-player-bet player (+ amount-to-call min-bet)))
-	 ((eq decision 'fold) (poker-player-fold player)))))
+	 ((eq decision 'fold) (poker-player-fold player))))))
 
-    (poker-dealer min-bet deck board button-player players))
+    (poker-dealer min-bet deck board players))
 
    ;; river, second round of bets, no raises allowed
    ((and (= (length board) 5) (cl-remove-if
 			       (lambda (player)
-				 (or (not (poker-player-active-p player))
+				 (or (not (poker-player-can-bet-p player))
 				     (= (poker-player-wagered player)
 					(poker-current-wager players))))
-			       (poker-rotate-to-first button-player players)))
+			       players))
     (message "Last betting round.")
     (dolist (player (cl-remove-if
 		     (lambda (player)
-		       (or (not (poker-player-active-p player))
+		       (or (not (poker-player-can-bet-p player))
 			   (= (poker-player-wagered player)
 			      (poker-current-wager players))))
-		     (poker-rotate-to-first button-player players)))
+		     players))
       (let* ((amount-to-call (- (poker-current-wager players)
 				(poker-player-wagered player)))
+	     (opponents (1- (length (cl-remove-if-not #'poker-player-pocket
+						      players))))
 	     (decision (poker-player-fcr player (poker-pot players)
-					 amount-to-call board)))
+					 amount-to-call board opponents)))
 	(message "%s wants to %S" (poker-player-name player) decision)
 	(cond
 	 ((eq decision 'call) (when (> amount-to-call 0)
@@ -640,15 +658,16 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	    (poker-player-bet player amount-to-call)))
 	 ((eq decision 'fold) (poker-player-fold player)))))
 
-    (poker-dealer min-bet deck board button-player players))
+    (poker-dealer min-bet deck board players))
 
    ;; showdown
    ((= (length board) 5)
     (cl-assert (not (zerop (poker-pot players))))
     (let ((in-play (cl-remove-if-not #'poker-player-active-p players))
 	  (groups ()))
-      (cl-assert (> (length in-play) 1))
-      (while (> (length in-play) 1)
+      (unless (> (length in-play) 1)
+	(error "In-play to small: %S %S" in-play players))
+      (while in-play
 	(if (= (length in-play) 1)
 	    (progn
 	      (message "%s wins %d."
@@ -667,13 +686,20 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 					      (poker-player-best-hand player board))
 					     best-hand-value))
 					in-play)))
-	    (poker-distribute-winnings winners players)
+	    (dolist (player in-play)
+	      (message "%s shows %s, %s."
+		       (poker-player-name player)
+		       (mapconcat #'poker-card-name (poker-player-pocket player) " ")
+		       (poker-describe-hand (poker-player-best-hand player board))))
+	    (message "%s wins %d."
+		     (mapconcat #'poker-player-name winners ", ")
+		     (poker-distribute-winnings winners players))
 	    (push winners groups))
 	  (setq in-play (cl-remove-if-not #'poker-player-active-p players))))
 
       (cons board (nreverse groups))))
 
-   (t (list 'error small-blind big-blind deck board button-player players))))
+   (t (list 'error min-bet deck board button-player players))))
 
 (defun poker (initial-stack min-bet players)
   "Play a game of texas holdem poker."
@@ -696,15 +722,18 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
   (let ((button-player (nth (random (length players)) players))
 	(rounds ())
 	(losers ()))
-    (while (and button-player (< (length rounds) 20))
+    (setq players (poker-rotate-to-first button-player players))
+    (while button-player
       (message "Round %d, %d players." (1+ (length rounds)) (length players))
-      (push (poker-dealer min-bet (poker-random-deck) () button-player players)
+
+      (push (poker-dealer min-bet (poker-random-deck) () players)
 	    rounds)
 
       (mapc #'poker-player-fold players)
       (setq button-player
-	    (cadr (cl-remove-if (lambda (player) (zerop (poker-player-stack player)))
-				(poker-rotate-to-first button-player players))))
+	    (car-safe (cdr (cl-remove-if (lambda (player)
+					   (zerop (poker-player-stack player)))
+					 (poker-rotate-to-first button-player players)))))
       (let ((lost (cl-remove-if-not (lambda (player) (zerop (poker-player-stack player)))
 				    players)))
 	(when lost
@@ -731,6 +760,22 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
       (accept-process-output))
 
     (cons players rounds)))
+
+(ert-deftest poker ()
+  (let ((players (list (poker-make-player "Angela" #'poker-automatic-fcr)
+		       (poker-make-player "Bettina" #'poker-automatic-fcr)
+		       (poker-make-player "Christoph" #'poker-automatic-fcr)
+		       (poker-make-player "Daniela" #'poker-automatic-fcr)
+		       (poker-make-player "Emilia" #'poker-automatic-fcr)
+		       (poker-make-player "Franz" #'poker-automatic-fcr)
+		       (poker-make-player "Günter" #'poker-automatic-fcr)
+		       (poker-make-player "Harald" #'poker-automatic-fcr)
+		       (poker-make-player "Isabella" #'poker-automatic-fcr)
+		       (poker-make-player "Jakob" #'poker-automatic-fcr))))
+    (while (> (length players) 1)
+      (should (equal (poker-player-stack (caar (poker 1000 100 players)))
+		     (* 1000 (length players))))
+      (setq players (cdr players)))))
 
 (provide 'poker)
 ;;; poker.el ends here
