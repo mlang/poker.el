@@ -111,15 +111,18 @@ CARDS is typically a list of 5 to 7 poker cards."
 
 (defun poker-best-hand (cards)
   "Find the best hand for a number of CARDS (usually a list of 6 or 7 elements)."
-  (car (poker-sort-hands (poker-possible-hands cards))))
+  (let ((max 0) (best-hand ()))
+    (dolist (hand (poker-possible-hands cards) best-hand)
+      (let ((value (poker-hand-value hand)))
+	(when (> value max) (setq max value best-hand hand))))))
 
 (defun poker-rank-to-string (rank)
   "The english name of poker card RANK."
-  (aref ["2" "3" "4" "5" "6" "7" "8" "9" "10" "jack" "queen" "king" "ace"] rank-value))
+  (aref ["2" "3" "4" "5" "6" "7" "8" "9" "10" "jack" "queen" "king" "ace"] rank))
 
 (defun poker-rank-to-plural-string (rank)
   "The plural english name of poker card RANK."
-  (concat (poker-rank-value-name rank-value) "s"))
+  (concat (poker-rank-value-name rank) "s"))
 
 (defun poker-describe-hand (hand)
   "Return a string description of the value of the given poker HAND.
