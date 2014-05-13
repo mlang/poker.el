@@ -1,8 +1,9 @@
-;;; poker.el --- Poker engine for Emacs
+;;; poker.el --- Texas hold'em poker engine for Emacs
 
 ;; Copyright (C) 2014  Free Software Foundation, Inc.
 
 ;; Author: Mario Lang <mlang@delysid.org>
+;; Version: 0.1
 ;; Keywords: games
 
 ;; This file is free software; you can redistribute it and/or modify
@@ -22,7 +23,7 @@
 
 ;;; Commentary:
 
-;; A collection of poker related functions.
+;; poker.el provides texas hold'em poker gameplay for Emacs.
 
 ;;; Requires:
 
@@ -733,6 +734,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 
    (t (list 'error min-bet deck board button-player players))))
 
+;;;###autoload
 (defun poker (initial-stack min-bet players)
   "Play a game of texas holdem poker."
   (interactive (list (read-number "Initial stack: " 1000)
