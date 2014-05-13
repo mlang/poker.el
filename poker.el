@@ -100,7 +100,8 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 		   #'> :key #'car)))
 
 (defun poker-possible-hands (cards)
-  "Generate a list of possible 5 card poker hand from CARDS."
+  "Generate a list of possible 5 card poker hands from CARDS.
+CARDS is typically a list of 5 to 7 poker cards."
   (if (<= (length cards) 5)
       (list cards)
     (apply #'nconc (mapcar (lambda (card)
@@ -108,19 +109,20 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 			   cards))))
 
 (defun poker-best-hand (cards)
-  "Find the best hand for a number of CARDS (usually 6 or 7)."
+  "Find the best hand for a number of CARDS (usually a list of 6 or 7 elements)."
   (car (poker-sort-hands (poker-possible-hands cards))))
 
 (defun poker-rank-to-string (rank)
-  "The name of a poker card RANK."
+  "The english name of poker card RANK."
   (aref ["2" "3" "4" "5" "6" "7" "8" "9" "10" "jack" "queen" "king" "ace"] rank-value))
 
 (defun poker-rank-to-plural-string (rank)
-  "The plural name of a poker card RANK."
+  "The plural english name of poker card RANK."
   (concat (poker-rank-value-name rank-value) "s"))
 
 (defun poker-describe-hand (hand)
-  "Return a string description of the value of the given poker HAND."
+  "Return a string description of the value of the given poker HAND.
+HAND is a list of 5 poker cards."
   (cl-assert (eq (length hand) 5))
   (pcase (let ((value (poker-hand-value hand)))
 	   (cl-loop for i from 5 downto 0 collect (logand (ash value (- (* i 4))) #xf)))
@@ -367,11 +369,11 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
   (car (poker-next-players player players)))
 
 (defun poker-pot (players)
-  "Return the amount of chips in the pot, the total wagered by PLAYERS."
+  "Return the amount of chips in the pot, the total wagered by all PLAYERS."
   (apply #'+ (mapcar #'poker-player-wagered players)))
 
 (defun poker-current-wager (players)
-  "Determine the maximuma mount of chips wagered by any of PLAYERS."
+  "Determine the maximum amount of chips wagered by any of PLAYERS."
   (apply #'max (mapcar #'poker-player-wagered players)))
 
 (defun poker-collect-wager (amount players)
