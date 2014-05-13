@@ -39,19 +39,23 @@
 ;;; Code:
 
 (defsubst poker-make-card (rank suit)
+  "Make a poker card from RANK and SUIT."
   (cl-assert (memq rank poker-ranks))
   (cl-assert (memq suit poker-suits))
   (+ (* (cl-position suit poker-suits) 13) (cl-position rank poker-ranks)))
 
 (defsubst poker-card-rank (card)
+  "The rank (a integer from 0 to 12) of a poker CARD."
   (cl-check-type card (integer 0 51))
   (% card 13))
 
 (defsubst poker-card-suit (card)
+  "The suit of a poker CARD."
   (cl-check-type card (integer 0 51))
   (/ card 13))
 
 (defsubst poker-card-name (card)
+  "The name of a poker CARD (a string of two characters."
   (cl-check-type card (integer 0 51))
   (concat (aref ["2" "3" "4" "5" "6" "7" "8" "9" "T" "J" "Q" "K" "A"]
 		(poker-card-rank card))
@@ -86,14 +90,17 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	    (if (> (length ranks) 4) (nth 4 ranks) 0))))
 
 (defun poker-hand-> (hand1 hand2)
+  "Return non-nil if HAND1 is better than HAND2."
   (> (poker-hand-value hand1) (poker-hand-value hand2)))
 
 (defun poker-sort-hands (hands)
+  "Sort HANDS (a list of list of cards) according to the value of the individual hands."
   (mapcar #'cdr
 	  (cl-sort (mapcar (lambda (hand) (cons (poker-hand-value hand) hand)) hands)
 		   #'> :key #'car)))
 
 (defun poker-possible-hands (cards)
+  "Generate a list of possible 5 card poker hand from CARDS."
   (if (<= (length cards) 5)
       (list cards)
     (apply #'nconc (mapcar (lambda (card)
@@ -104,61 +111,66 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
   "Find the best hand for a number of CARDS (usually 6 or 7)."
   (car (poker-sort-hands (poker-possible-hands cards))))
 
-(defun poker-rank-value-name (rank-value)
-  (let ((rank-value-names ["2" "3" "4" "5" "6" "7" "8" "9" "10"
-			   "jack" "queen" "king" "ace"]))
-    (aref rank-value-names rank-value)))
+(defun poker-rank-to-string (rank)
+  "The name of a poker card RANK."
+  (aref ["2" "3" "4" "5" "6" "7" "8" "9" "10" "jack" "queen" "king" "ace"] rank-value))
 
-(defun poker-rank-value-name-plural (rank-value)
+(defun poker-rank-to-plural-string (rank)
+  "The plural name of a poker card RANK."
   (concat (poker-rank-value-name rank-value) "s"))
 
 (defun poker-describe-hand (hand)
+  "Return a string description of the value of the given poker HAND."
   (cl-assert (eq (length hand) 5))
-  (pcase (let ((v (poker-hand-value hand)))
-	   (cl-loop for i from 5 downto 0 collect (logand (ash v (- (* i 4))) #xf)))
+  (pcase (let ((value (poker-hand-value hand)))
+	   (cl-loop for i from 5 downto 0 collect (logand (ash value (- (* i 4))) #xf)))
     (`(8 ,high ,_ ,_ ,_ ,_) (pcase high
 			      (12 "royal flush")
 			      (_ (format "%s high straight flush"
-					 (poker-rank-value-name high)))))
+					 (poker-rank-to-string high)))))
     (`(7 ,four ,high 0 0 0) (format "four %s, %s high"
-				    (poker-rank-value-name-plural four)
-				    (poker-rank-value-name high)))
+				    (poker-rank-to-plural-string four)
+				    (poker-rank-to-string high)))
     (`(6 ,three ,two 0 0 0) (format "full house of %s and %s"
-				    (poker-rank-value-name-plural three)
-				    (poker-rank-value-name-plural two)))
+				    (poker-rank-to-plural-string three)
+				    (poker-rank-to-plural-string two)))
     (`(5 ,high ,k1 ,k2 ,k3 ,k4) (format "%s high flush, %s %s %s and %s kickers"
-					(poker-rank-value-name high)
-					(poker-rank-value-name k1)
-					(poker-rank-value-name k2)
-					(poker-rank-value-name k3)
-					(poker-rank-value-name k4)))
+					(poker-rank-to-string high)
+					(poker-rank-to-string k1)
+					(poker-rank-to-string k2)
+					(poker-rank-to-string k3)
+					(poker-rank-to-string k4)))
     (`(4 ,high ,_ ,_ ,_ ,_) (pcase high
 			      (3 "5 high straight (steel wheel)")
-			      (_ (format "%s high straight" (poker-rank-value-name high)))))
+			      (_ (format "%s high straight"
+					 (poker-rank-to-string high)))))
     (`(3 ,three ,high ,kicker 0 0) (format "three %s, %s high, %s kicker"
-					   (poker-rank-value-name-plural three)
-					   (poker-rank-value-name high)
-					   (poker-rank-value-name kicker)))
+					   (poker-rank-to-plural-string three)
+					   (poker-rank-to-string high)
+					   (poker-rank-to-string kicker)))
     (`(2 ,two1 ,two2 ,high 0 0) (format "wwo pairs of %s and %s, %s high"
-				    (poker-rank-value-name-plural two1)
-				    (poker-rank-value-name-plural two2)
-				    (poker-rank-value-name high)))
+				    (poker-rank-to-plural-string two1)
+				    (poker-rank-to-plural-string two2)
+				    (poker-rank-to-string high)))
     (`(1 ,two ,high ,k1 ,k2 0) (format "a pair of %s, %s high, %s and %s kickers"
-				       (poker-rank-value-name-plural two)
-				       (poker-rank-value-name high)
-				       (poker-rank-value-name k1)
-				       (poker-rank-value-name k2)))
+				       (poker-rank-to-plural-string two)
+				       (poker-rank-to-string high)
+				       (poker-rank-to-string k1)
+				       (poker-rank-to-string k2)))
     (`(0 ,high ,k1 ,k2 ,k3 ,k4) (format "high card %s, %s %s %s and %s kickers"
-					(poker-rank-value-name high)
-					(poker-rank-value-name k1)
-					(poker-rank-value-name k2)
-					(poker-rank-value-name k3)
-					(poker-rank-value-name k4)))))
+					(poker-rank-to-string high)
+					(poker-rank-to-string k1)
+					(poker-rank-to-string k2)
+					(poker-rank-to-string k3)
+					(poker-rank-to-string k4)))))
 
 (defun poker-random-deck ()
+  "Return a shuffled deck of 52 poker cards."
   (append (cookie-shuffle-vector (apply 'vector poker-deck)) nil))
 
 (defun poker-strength (pocket &optional community opponents)
+  "Estimate the strength of POCKET and COMMUNITY cards against number of OPPONENTS.
+The optional number of OPPONENTS defaults to 2."
   (let ((wins 0) (iterations 100))
     (dotimes (i iterations)
       (let ((deck (poker-random-deck))
@@ -173,12 +185,13 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	    (push (pop deck) board))
 	  (setq wins (+ wins (caar (cl-sort
 				    (mapcar (lambda (info)
-					      (setcdr info (poker-best-hand (append (cdr info) board)))
+					      (setcdr info (poker-best-hand
+							    (append (cdr info) board)))
 					      info)
-					    (append (list (cons 1 pocket))
-						    (mapcar (lambda (cards)
-							      (cons 0 cards))
-							    players)))
+					    (nconc (list (cons 1 pocket))
+						   (mapcar (lambda (cards)
+							     (cons 0 cards))
+							   players)))
 				    #'poker-hand-> :key #'cdr)))))))
     (/ (float wins) iterations)))
 
@@ -227,9 +240,11 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
     (cl-sort hands #'> :key #'car)))
 
 (defun poker-pot-odds (bet pot)
+  "Return the odds when BET is added to POT."
   (/ (float bet) (+ pot bet)))
 
 (defun poker-random-fold-call-raise (fold% call% raise%)
+  "Randomly choose between FOLD%, CALL% and RAISE%."
   (cl-assert (= (+ fold% call% raise%) 100))
   (let ((value (random 100)))
     (cond
@@ -239,6 +254,8 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
      (t (error "Random FCR Error")))))
 
 (defun poker-make-player (name fcr-fn)
+  "Create a new poker player with NAME and FCR-FN.
+FCR-FN specifies a function to use when a fold-call-raise decision is required."
   (list (cons 'name name)
 	(cons 'stack 0)
 	(cons 'wagered 0)
@@ -246,12 +263,15 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	(cons 'fcr-fn fcr-fn)))
   
 (defun poker-player-name (player)
+  "Return the name of poker PLAYER."
   (cdr (assq 'name player)))
 
 (defun poker-player-stack (player)
+  "Return the remaining stack of poker PLAYER."
   (cdr (assq 'stack player)))
 
 (defun poker-player-bet (player amount)
+  "Make PLAYER bet AMOUNT of chips."
   (let ((actual (min (poker-player-stack player) amount)))
     (when (zerop actual) (message "WARNING: Actual is 0."))
     (message "%s: %d - %d == %d"
@@ -264,16 +284,20 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
     actual))
 
 (defun poker-player-payout (player amount)
+  "Give PLAYER AMOUNT of chips."
   (cl-incf (cdr (assq 'stack player)) amount)
   amount)
 
 (defun poker-player-wagered (player)
+  "Return the amount of chips currently wagered by poker PLAYER."
   (cdr (assq 'wagered player)))
 
 (defun poker-player-pocket (player)
+  "Return the current pocket (hole) cards of PLAYER."
   (cdr (assq 'pocket player)))
 
 (defun poker-player-fold (player)
+  "Make PLAYER fold and forget about their cards."
   (setcdr (assq 'pocket player) nil))
 
 (defun poker-player-active-p (player)
@@ -330,6 +354,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
     action))
 
 (defun poker-rotate-to-first (player players)
+  "Make PLAYER the first element of PLAYERS."
   (let ((position (cl-position player players)))
     (when position
       (let ((shift (- (length players) position)))
@@ -342,12 +367,15 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
   (car (poker-next-players player players)))
 
 (defun poker-pot (players)
+  "Return the amount of chips in the pot, the total wagered by PLAYERS."
   (apply #'+ (mapcar #'poker-player-wagered players)))
 
 (defun poker-current-wager (players)
+  "Determine the maximuma mount of chips wagered by any of PLAYERS."
   (apply #'max (mapcar #'poker-player-wagered players)))
 
 (defun poker-collect-wager (amount players)
+  "Collect AMOUNT of wager from PLAYERS."
   (let ((total 0))
     (dolist (player players total)
       (let ((wagered (assq 'wagered player)))
@@ -359,6 +387,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	  (setcdr wagered (- (cdr wagered) amount)))))))
 
 (defun poker-distribute-winnings (winners players)
+  "Distribute chips to WINNERS from PLAYERS accounting for split-pot rules."
   (cl-assert (not (null winners)))
   (cl-assert (> (length players) 1))
   (if (= (length winners) 1)
@@ -374,6 +403,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
       total)))
 
 (defun poker-player-max-raise (player players)
+  "Determine the maximum amount allowed to raise for PLAYER considering PLAYERS stacks."
   (let ((other-stacks (mapcar #'poker-player-stack
 			      (cl-remove
 			       player
@@ -381,7 +411,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
     (min (poker-player-stack player) (if other-stacks (apply #'max other-stacks) 0))))
 
 (defun poker-dealer (min-bet deck board players)
-  "Deal a round of texas holdem poker for PLAYERS."
+  "Deal a round of texas holdem poker for with MIN-BET for PLAYERS."
   (cl-assert (> (length players) 1))
   (cond
    ;; pre-flop
