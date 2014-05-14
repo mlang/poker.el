@@ -120,7 +120,7 @@ CARDS is a list of 5 to 7 poker cards."
 				  (or (eq card card1) (eq card card2)))
 				cards) hands)))))
      ((= length 6) (dolist (card cards hands) (push (remq card cards) hands)))
-     ((= length 5) cards)
+     ((= length 5) (list cards))
      (t (error "Invalid number of cards")))))
 
 (defun poker-best-hand (cards)
@@ -426,7 +426,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
     (min (poker-player-stack player) (if other-stacks (apply #'max other-stacks) 0))))
 
 (defun poker-dealer (min-bet deck board players)
-  "Deal a round of texas holdem poker for with MIN-BET for PLAYERS."
+  "Deal a round of texas holdem poker with MIN-BET for PLAYERS."
   (cl-assert (> (length players) 1))
   (cond
    ;; pre-flop
