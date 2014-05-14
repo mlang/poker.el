@@ -31,6 +31,12 @@
 (require 'cookie1)
 (require 'ert)
 
+;;; Compatibility
+
+(eval-and-compile
+  (unless (fboundp 'cookie-shuffle-vector)
+    (defalias 'cookie-shuffle-vector 'shuffle-vector)))
+
 ;;; Constants:
 
 (defconst poker-ranks '(2 3 4 5 6 7 8 9 10 jack queen king ace))
