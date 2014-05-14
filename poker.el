@@ -31,7 +31,7 @@
 (require 'cookie1)
 (require 'ert)
 
-;;; Compatibility
+;;; Compatibility:
 
 (eval-and-compile
   (unless (fboundp 'cookie-shuffle-vector)
@@ -109,12 +109,19 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 
 (defun poker-possible-hands (cards)
   "Generate a list of possible 5 card poker hands from CARDS.
-CARDS is typically a list of 5 to 7 poker cards."
-  (if (<= (length cards) 5)
-      (list cards)
-    (apply #'nconc (mapcar (lambda (card)
-			     (poker-possible-hands (remove card cards)))
-			   cards))))
+CARDS is a list of 5 to 7 poker cards."
+  (let ((length (length cards)) (hands ()))
+    (cond
+     ((= length 7)
+      (dolist (card1 cards hands)
+	(dolist (card2 cards)
+	  (unless (eq card1 card2)
+	    (push (cl-remove-if (lambda (card)
+				  (or (eq card card1) (eq card card2)))
+				cards) hands)))))
+     ((= length 6) (dolist (card cards hands) (push (remq card cards) hands)))
+     ((= length 5) cards)
+     (t (error "Invalid number of cards")))))
 
 (defun poker-best-hand (cards)
   "Find the best hand for a number of CARDS (usually a list of 6 or 7 elements)."
@@ -129,7 +136,7 @@ CARDS is typically a list of 5 to 7 poker cards."
 
 (defun poker-rank-to-plural-string (rank)
   "The plural english name of poker card RANK."
-  (concat (poker-rank-value-name rank) "s"))
+  (concat (poker-rank-to-string rank) "s"))
 
 (defun poker-describe-hand (hand)
   "Return a string description of the value of the given poker HAND.
@@ -220,10 +227,10 @@ The optional number of OPPONENTS defaults to 2."
 		      (if (memq rank1 '(2 3 4 5 6 7 8 9))
 			  (+ (* rank1 10) rank1)
 			(intern (format "%s%s"
-					(aref rank-name (cl-position poker-ranks rank1))
-					(aref rank-name (cl-position poker-ranks rank2))))))
+					(aref rank-name (cl-position rank1 poker-ranks))
+					(aref rank-name (cl-position rank2 poker-ranks))))))
 		hands)
-	  (when (< (cl-position poker-ranks rank1) (cl-position poker-ranks rank2))
+	  (when (< (cl-position rank1 poker-ranks) (cl-position rank2 poker-ranks))
 	    (let ((tmp rank1))
 	      (setq tmp rank1
 		    rank1 rank2
@@ -235,8 +242,8 @@ The optional number of OPPONENTS defaults to 2."
 			    (+ (* rank1 10) rank2)
 			  (intern
 			   (format "%s%s%s"
-				   (aref rank-name (cl-position poker-ranks rank1))
-				   (aref rank-name (cl-position poker-ranks rank2))
+				   (aref rank-name (cl-position rank1 poker-ranks))
+				   (aref rank-name (cl-position rank2 poker-ranks))
 				   (if suited "s" ""))))))
 	      (unless (rassq code hands)
 		(accept-process-output)
