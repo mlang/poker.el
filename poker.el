@@ -40,7 +40,8 @@
 ;;; Code:
 
 (defsubst poker-make-card (rank suit)
-  "Make a poker card from RANK and SUIT."
+  "Make a poker card from RANK and SUIT.
+RANK is one of `poker-ranks' and SUIT is one of `poker-suits'."
   (cl-assert (memq rank poker-ranks))
   (cl-assert (memq suit poker-suits))
   (+ (* (cl-position suit poker-suits) 13) (cl-position rank poker-ranks)))
@@ -51,7 +52,7 @@
   (% card 13))
 
 (defsubst poker-card-suit (card)
-  "The suit of a poker CARD."
+  "The suit (an integer from 0 to 3) of a poker CARD."
   (cl-check-type card (integer 0 51))
   (/ card 13))
 
@@ -106,7 +107,7 @@ CARDS is typically a list of 5 to 7 poker cards."
   (if (<= (length cards) 5)
       (list cards)
     (apply #'nconc (mapcar (lambda (card)
-			     (poker-possible-hands (cl-remove card cards)))
+			     (poker-possible-hands (remove card cards)))
 			   cards))))
 
 (defun poker-best-hand (cards)
@@ -208,14 +209,15 @@ The optional number of OPPONENTS defaults to 2."
       (dolist (rank2 poker-ranks)
 	(if (eq rank1 rank2)
 	  (push (cons (poker-strength (list (poker-make-card rank1 'clubs)
-						   (poker-make-card rank2 'hearts))
-					     nil opponents)
+					    (poker-make-card rank2 'hearts))
+				      nil opponents)
 		      (if (memq rank1 '(2 3 4 5 6 7 8 9))
 			  (+ (* rank1 10) rank1)
-			(intern (format "%s%s" (aref rank-name (poker-rank-value rank1))
-				      (aref rank-name (poker-rank-value rank2))))))
+			(intern (format "%s%s"
+					(aref rank-name (cl-position poker-ranks rank1))
+					(aref rank-name (cl-position poker-ranks rank2))))))
 		hands)
-	  (when (< (poker-rank-value rank1) (poker-rank-value rank2))
+	  (when (< (cl-position poker-ranks rank1) (cl-position poker-ranks rank2))
 	    (let ((tmp rank1))
 	      (setq tmp rank1
 		    rank1 rank2
@@ -225,24 +227,18 @@ The optional number of OPPONENTS defaults to 2."
 				 (memq rank2 '(2 3 4 5 6 7 8 9))
 				 (not suited))
 			    (+ (* rank1 10) rank2)
-			  (intern (format "%s%s%s"
-					  (aref rank-name (poker-rank-value rank1))
-					  (aref rank-name (poker-rank-value rank2))
-					  (if suited "s" ""))))))
+			  (intern
+			   (format "%s%s%s"
+				   (aref rank-name (cl-position poker-ranks rank1))
+				   (aref rank-name (cl-position poker-ranks rank2))
+				   (if suited "s" ""))))))
 	      (unless (rassq code hands)
 		(accept-process-output)
 		(message "%S" code)
-		(push (cons (if suited
-				(poker-strength
-				 (list (poker-make-card rank1 'clubs)
-				       (poker-make-card rank2 'clubs))
-				 nil opponents)
-			      (poker-strength
-			       (list (poker-make-card rank1 'clubs)
-				     (poker-make-card rank2 'hearts))
-			       nil opponents))
-			    code)
-		      hands)))))))
+		(push (cons (poker-strength
+			     (list (poker-make-card rank1 'clubs)
+				   (poker-make-card rank2 (if suited 'clubs 'hearts)))
+			     nil opponents) code) hands)))))))
     (cl-sort hands #'> :key #'car)))
 
 (defun poker-pot-odds (bet pot)
@@ -516,7 +512,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 	   ((eq decision 'call) (when (> amount-to-call 0)
 				  (poker-player-bet player amount-to-call)))
 	   ((eq decision 'raise)
-	    (message "no raise allowed, calling." (poker-player-name player))
+	    (message "No raise allowed, %s is calling." (poker-player-name player))
 	    (when (> amount-to-call 0)
 	      (poker-player-bet player amount-to-call)))
 	   ((eq decision 'fold) (poker-player-fold player))))))
@@ -573,7 +569,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 	 ((eq decision 'call) (when (> amount-to-call 0)
 				(poker-player-bet player amount-to-call)))
 	 ((eq decision 'raise)
-	  (message "no raise allowed, %s is calling." (poker-player-name player))
+	  (message "No raise allowed, %s is calling." (poker-player-name player))
 	  (when (> amount-to-call 0)
 	    (poker-player-bet player amount-to-call)))
 	 ((eq decision 'fold) (poker-player-fold player)))))
@@ -632,7 +628,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 	 ((eq decision 'call) (when (> amount-to-call 0)
 				(poker-player-bet player amount-to-call)))
 	 ((eq decision 'raise)
-	  (message "no raise allowed, %s is calling." (poker-player-name player))
+	  (message "No raise allowed, %s is calling." (poker-player-name player))
 	  (when (> amount-to-call 0)
 	    (poker-player-bet player amount-to-call)))
 	 ((eq decision 'fold) (poker-player-fold player)))))
@@ -689,7 +685,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 	 ((eq decision 'call) (when (> amount-to-call 0)
 				(poker-player-bet player amount-to-call)))
 	 ((eq decision 'raise)
-	  (message "no raise allowed, %s is calling." (poker-player-name player))
+	  (message "No raise allowed, %s is calling." (poker-player-name player))
 	  (when (> amount-to-call 0)
 	    (poker-player-bet player amount-to-call)))
 	 ((eq decision 'fold) (poker-player-fold player)))))
@@ -735,11 +731,11 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 
       (cons board (nreverse groups))))
 
-   (t (list 'error min-bet deck board button-player players))))
+   (t (list 'error min-bet deck board players))))
 
 ;;;###autoload
 (defun poker (initial-stack min-bet players)
-  "Play a game of texas holdem poker."
+  "Play a game of texas hold 'em poker."
   (interactive (list (read-number "Initial stack: " 1000)
 		     (read-number "Minimum bet: " 50)
 		     (list (poker-make-player "Angela" #'poker-automatic-fcr)
