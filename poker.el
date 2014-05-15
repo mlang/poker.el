@@ -113,7 +113,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
    ((= 0 m) '(()))
    ((null lst) '())
    (t
-    (append
+    (nconc
      (mapcar (lambda (y) (cons (car lst) y))
 	     (poker-combinations (1- m) (cdr lst)))
      (poker-combinations m (cdr lst))))))
