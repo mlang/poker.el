@@ -108,16 +108,15 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 		   #'> :key #'car)))
 
 (defun poker-combinations (m lst)
-  "list of all unique ways of taking m different elements from lst"
+  "A list of all unique ways of taking M different elements from LST."
   (cond
    ((= 0 m) '(()))
    ((null lst) '())
    (t
     (append
-     (mapcar
-      (lambda (y) (cons (car lst) y))
-      (comb (1- m) (cdr lst)))
-     (comb m (cdr lst))))))
+     (mapcar (lambda (y) (cons (car lst) y))
+	     (poker-combinations (1- m) (cdr lst)))
+     (poker-combinations m (cdr lst))))))
 
 (defun poker-possible-hands (cards)
   "Generate a list of possible 5 card poker hands from CARDS.
