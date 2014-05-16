@@ -131,9 +131,11 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
   "A list of all unique ways of taking N different elements from LIST."
   (when list
     (nconc (if (eq n 1)
-	       (list (list (car list)))
-	     (mapcar (lambda (rest) (cons (car list) rest))
-		     (poker-combinations (1- n) (cdr list))))
+	       (list (if (cdr list) (list (car list)) list))
+	     (if (eq n (length list))
+		 (list list)
+	       (mapcar (lambda (rest) (cons (car list) rest))
+		       (poker-combinations (1- n) (cdr list)))))
 	   (poker-combinations n (cdr list)))))
 
 (defun poker-possible-hands (cards)
