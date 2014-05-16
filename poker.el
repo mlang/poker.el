@@ -127,16 +127,13 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 	  (cl-sort (mapcar (lambda (hand) (cons (poker-hand-value hand) hand)) hands)
 		   #'> :key #'car)))
 
-(defun poker-combinations (m lst)
-  "A list of all unique ways of taking M different elements from LST."
-  (cond
-   ((zerop m) '(()))
-   ((null lst) '())
-   (t
-    (nconc
-     (mapcar (lambda (y) (cons (car lst) y))
-	     (poker-combinations (1- m) (cdr lst)))
-     (poker-combinations m (cdr lst))))))
+(defun poker-combinations (n list)
+  "A list of all unique ways of taking N different elements from LIST."
+  (if (zerop n) '(())
+    (when list
+      (nconc (mapcar (lambda (rest) (cons (car list) rest))
+		     (poker-combinations (1- n) (cdr list)))
+	     (poker-combinations n (cdr list))))))
 
 (defun poker-possible-hands (cards)
   "Generate a list of possible 5 card poker hands from CARDS.
@@ -829,6 +826,10 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
       (accept-process-output))
 
     (cons players rounds)))
+
+(ert-deftest poker-combinations ()
+  (equal 21 (length (poker-combinations 5 (last poker-deck 7))))
+  (equal 1326 (length (poker-combinations 2 poker-deck))))
 
 (ert-deftest poker ()
   (let ((players (list (poker-make-player "Angela" #'poker-automatic-fcr)
