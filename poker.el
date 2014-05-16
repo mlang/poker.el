@@ -129,23 +129,22 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 
 (defun poker-combinations (n list)
   "A list of all unique ways of taking N different elements from LIST."
-  (if (zerop n) '(())
-    (when list
-      (nconc (mapcar (lambda (rest) (cons (car list) rest))
-		     (poker-combinations (1- n) (cdr list)))
-	     (poker-combinations n (cdr list))))))
+  (when list
+    (nconc (if (eq n 1)
+	       (list (list (car list)))
+	     (mapcar (lambda (rest) (cons (car list) rest))
+		     (poker-combinations (1- n) (cdr list))))
+	   (poker-combinations n (cdr list)))))
 
 (defun poker-possible-hands (cards)
   "Generate a list of possible 5 card poker hands from CARDS.
 CARDS is a list of 5 to 7 poker cards."
-  (let ((length (length cards)))
-    (if (and (<= length 7) (>= length 5))
-	(poker-combinations 5 cards)
-      (error "Invalid number of cards"))))
+  (cl-check-type (length cards) (integer 5 7))
+  (poker-combinations 5 cards))
 
 (defun poker-best-hand (cards)
   "Find the best hand for a number of CARDS (usually a list of 6 or 7 elements)."
-  (let ((max 0) (best-hand ()))
+  (let ((max 0) (best-hand nil))
     (dolist (hand (poker-possible-hands cards) best-hand)
       (let ((value (poker-hand-value hand)))
 	(when (> value max) (setq max value best-hand hand))))))
