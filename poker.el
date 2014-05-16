@@ -42,6 +42,22 @@
 (defconst poker-ranks '(2 3 4 5 6 7 8 9 10 jack queen king ace))
 (defconst poker-suits '(clubs diamonds hearts spades))
 (defconst poker-deck (cl-loop for card from 0 to 51 collect card))
+(defconst poker-unicode-cards
+  (let ((unicode-suit '((clubs . #xD0) (diamonds . #XC0)
+			(hearts . #XB0) (spades . #XA0))))
+    (apply #'vector
+	   (cl-loop for suit in poker-suits
+		    nconc
+		    (cl-loop for rank in poker-ranks
+			     collect
+			     (logior #x1f000
+				     (cdr (assq suit unicode-suit))
+				     (cond
+				      ((eq rank 'ace)   #x1)
+				      ((eq rank 'jack)  #xB)
+				      ((eq rank 'queen) #xD)
+				      ((eq rank 'king)  #XE)
+				      (t                rank))))))))
 
 ;;; Code:
 
@@ -63,11 +79,15 @@ RANK is one of `poker-ranks' and SUIT is one of `poker-suits'."
   (/ card 13))
 
 (defsubst poker-card-name (card)
-  "The name of a poker CARD (a string of two characters."
+  "The name of a poker CARD (a string of two characters)."
   (cl-check-type card (integer 0 51))
   (concat (aref ["2" "3" "4" "5" "6" "7" "8" "9" "T" "J" "Q" "K" "A"]
 		(poker-card-rank card))
 	  (aref ["c" "d" "h" "s"] (poker-card-suit card))))
+
+(defun poker-card-unicode (card)
+  "The Unicode character for a poker CARD."
+  (aref poker-unicode-cards card))
 
 (defun poker-hand-value (hand)
   "Calculate the value of a given 5 card poker HAND.
@@ -110,7 +130,7 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 (defun poker-combinations (m lst)
   "A list of all unique ways of taking M different elements from LST."
   (cond
-   ((= 0 m) '(()))
+   ((zerop m) '(()))
    ((null lst) '())
    (t
     (nconc
