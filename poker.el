@@ -1,4 +1,4 @@
-;;; poker.el --- Texas hold'em poker engine for Emacs
+;;; poker.el --- Texas hold'em poker
 
 ;; Copyright (C) 2014  Free Software Foundation, Inc.
 
@@ -6,20 +6,18 @@
 ;; Version: 0.1
 ;; Keywords: games
 
-;; This file is free software; you can redistribute it and/or modify
+;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation; either version 2, or (at your option)
-;; any later version.
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
 
-;; This file is distributed in the hope that it will be useful,
+;; This program is distributed in the hope that it will be useful,
 ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with GNU Emacs; see the file COPYING.  If not, write to
-;; the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
-;; Boston, MA 02111-1307, USA.
+;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 
@@ -819,7 +817,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
       (accept-process-output)
 
       (when (and game-interactive-p (not (poker-interactive-p players)))
-	(message "You drop out as %s player."
+	(message "You drop out in %s place."
 		 (let ((rank (1+ (length players))))
 		   (pcase rank
 		     (2 "2nd")
