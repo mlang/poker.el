@@ -99,23 +99,31 @@ The highest possible value is therefore #x8CBA98 and the lowest is #x053210."
 				    (cl-remove-duplicates ranks))
 			    (lambda (lhs rhs) (or (> (car lhs) (car rhs))
 						  (and (= (car lhs) (car rhs))
-						       (> (cdr lhs) (cdr rhs))))))))
-    (setq ranks (mapcar #'cdr rank-counts))
-    (logior (ash (pcase (mapcar #'car rank-counts)
-		   (`(1 1 1 1 1)
-		    (let ((straight (or (when (and (eq (nth 0 ranks) 12) (eq (nth 1 ranks) 3))
+						       (> (cdr lhs) (cdr rhs)))))))
+	 (ranks-length nil))
+    (setq ranks (mapcar #'cdr rank-counts)
+	  rank-counts (mapcar #'car rank-counts)
+	  ranks-length (length ranks))
+    (logior (ash (cond
+		  ((equal rank-counts '(2 1 1 1)) 1)
+		  ((eq ranks-length 5)
+		   (let ((straight (or (when (and (eq (nth 0 ranks) 12)
+						   (eq (nth 1 ranks) 3))
 					  (setq ranks '(3 2 1 0 0)))
 					(eq (- (nth 0 ranks) (nth 4 ranks)) 4)))
 			  (flush (eq (length (cl-delete-duplicates
 					      (mapcar #'poker-card-suit hand))) 1)))
 		      (cond ((and straight flush) 8) (flush 5) (straight 4) (t 0))))
-		   (`(2 1 1 1) 1) (`(2 2 1) 2) (`(3 1 1) 3) (`(3 2) 6) (`(4 1) 7))
+		  ((equal rank-counts '(2 2 1)) 2)
+		  ((equal rank-counts '(3 1 1)) 3)
+		  ((equal rank-counts '(3 2)) 6)
+		  ((equal rank-counts '(4 1)) 7))
 		 20)
 	    (ash (nth 0 ranks) 16)
 	    (ash (nth 1 ranks) 12)
-	    (if (> (length ranks) 2) (ash (nth 2 ranks) 8) 0)
-	    (if (> (length ranks) 3) (ash (nth 3 ranks) 4) 0)
-	    (if (> (length ranks) 4) (nth 4 ranks) 0))))
+	    (if (> ranks-length 2) (ash (nth 2 ranks) 8) 0)
+	    (if (> ranks-length 3) (ash (nth 3 ranks) 4) 0)
+	    (if (> ranks-length 4) (nth 4 ranks) 0))))
 
 (defun poker-hand-> (hand1 hand2)
   "Return non-nil if HAND1 is better than HAND2."
@@ -391,10 +399,11 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 (defun poker-player-fcr-fn (player)
   (cdr (assq 'fcr-fn player)))
 
-(defun poker-player-fcr (player pot due board opponents)
-  (funcall (poker-player-fcr-fn player) player pot due board opponents))
+(defun poker-player-fcr (player pot amount-to-call max-raise board opponents)
+  (funcall (poker-player-fcr-fn player)
+	   player pot amount-to-call max-raise board opponents))
 
-(defun poker-read-fold-call-raise (pot to-call &optional prompt)
+(defun poker-read-fold-call-raise (pot to-call max-raise &optional prompt)
   (let ((cursor-in-echo-area t)
 	(map (let ((map (make-sparse-keymap)))
 	       (define-key map [?c] 'call)
@@ -410,20 +419,19 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
     (cond
      ((eq action 'fold) nil)
      ((eq action 'call) to-call)
-     ((eq action 'raise) (+ to-call (read-number "Raise by? "))))))
+     ((eq action 'raise) (+ to-call (let ((raise (1+ max-raise)))
+				      (while (> raise max-raise)
+					(setq raise
+					      (read-number (format "Raise by (max %d): "
+								   max-raise))))
+				      (cl-check-type raise integer)
+				      raise))))))
 
-(defun poker-interactive-fcr (player pot due board opponents)
-  (let ((char nil))
-    (while (not (memq char '(?c ?f ?r)))
-      (setq char (read-char
-		  (format "%s, %d stack, %d in pot, %d to call: (c)all, (f)old or (r)aise? "
-			  (mapconcat #'poker-card-name
-				     (append (poker-player-pocket player) board)
-				     " ")
-			  (poker-player-stack player) pot due))))
-    (cdr (assq char '((?c . call) (?f . fold) (?r . raise))))))
+(defun poker-interactive-fcr (player pot due max-raise board opponents)
+  (poker-read-fold-call-raise
+   pot due max-raise (format "%d stack, " (poker-player-stack player))))
 
-(defun poker-automatic-fcr (player pot due board &optional opponents)
+(defun poker-automatic-fcr (player pot due max-raise board &optional opponents)
   (let* ((strength (poker-strength (poker-player-pocket player) board opponents))
 	 (pot-odds (poker-pot-odds due pot))
 	 (rate-of-return (/ strength pot-odds))
@@ -439,7 +447,10 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
       (setq action 'call))
     (when (and (zerop due) (eq action 'fold))
       (setq action 'call))
-    action))
+    (cond
+     ((eq action 'fold) nil)
+     ((eq action 'call) due)
+     ((eq action 'raise) (+ due (min 100 max-raise))))))
 
 (defun poker-rotate-to-first (player players)
   "Make PLAYER the first element of PLAYERS."
@@ -498,6 +509,36 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 			       (cl-remove-if-not #'poker-player-can-bet-p players)))))
     (min (poker-player-stack player) (if other-stacks (apply #'max other-stacks) 0))))
 
+(defun poker-interactive-p (players)
+  (cl-find #'poker-interactive-fcr players :key #'poker-player-fcr-fn))
+
+(defun poker-dealer-ask-player (player players board allow-raise)
+  "Ask PLAYER for next action."
+  (let ((pot (poker-pot players))
+	(max-raise (if allow-raise (poker-player-max-raise player players) 0))
+	(amount-to-call (- (poker-current-wager players)
+			   (poker-player-wagered player)))
+	(opponents (1- (length (cl-remove-if-not #'poker-player-pocket players)))))
+    (cl-assert (> opponents 0))
+    (let ((decision (poker-player-fcr player pot amount-to-call max-raise
+				      board opponents)))
+      (cl-assert (or (null decision)
+		     (and (integerp decision)
+			  (<= (- decision amount-to-call) max-raise))))
+      (cond
+       ((null decision)
+	(message (format "%s folds." (poker-player-name player)))
+	(poker-player-fold player))
+       ((zerop decision)
+	(message "%s checks." (poker-player-name player)))
+       ((integerp decision)
+	(if (= decision amount-to-call)
+	    (message "%s calls %d." (poker-player-name player) decision)
+	  (cl-assert (>= decision amount-to-call))
+	  (message "%s raises by %d."
+		   (poker-player-name player) (- decision amount-to-call)))
+	(poker-player-bet player decision))))))
+
 (defun poker-dealer (min-bet deck board players)
   "Deal a round of texas holdem poker with MIN-BET for PLAYERS."
   (cl-assert (> (length players) 1))
@@ -506,7 +547,9 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
    ((and (null board) (zerop (poker-pot players)))
     (let ((blinds players))
       (message "Collecting blinds.")
+      (message "%s posts %d small blind." (poker-player-name (car blinds)) (/ min-bet 2))
       (poker-player-bet (car blinds) (/ min-bet 2))
+      (message "%s posts %d big blind." (poker-player-name (cadr blinds)) min-bet)
       (poker-player-bet (cadr blinds) min-bet)
       (message "Dealing cards to players.")
       (dotimes (_ 2)
@@ -517,43 +560,13 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
       (dolist (player (poker-next-players (cadr blinds) players))
 
 	(unless (zerop (poker-player-stack player))
-	  (let* ((max-raise (poker-player-max-raise player players))
-		 (amount-to-call (- (poker-current-wager players)
-				  (poker-player-wagered player)))
-		 (opponents (1- (length (cl-remove-if-not #'poker-player-pocket
-							players))))
-		 (decision (poker-player-fcr player (poker-pot players)
-					     amount-to-call board opponents)))
-	    (message "%s %S" (poker-player-name player) decision)
-	    (cond
-	     ((eq decision 'call) (when (> amount-to-call 0)
-				    (poker-player-bet player amount-to-call)))
-	     ((eq decision 'raise)
-	      (message "%s raises by %d."
-		       (poker-player-name player)
-		       (min max-raise min-bet))
-	      (poker-player-bet player (min max-raise (+ amount-to-call min-bet))))
-	     ((eq decision 'fold) (poker-player-fold player))))))
+	  (poker-dealer-ask-player player players board t)))
 
       (when (and (not (zerop (poker-player-stack (cadr blinds))))
 		 (or (> (length (cl-remove-if-not #'poker-player-can-bet-p players)) 1)
 		     (< (poker-player-wagered (cadr blinds))
 			(poker-current-wager players))))
-	(let* ((amount-to-call (- (poker-current-wager players)
-				  (poker-player-wagered (cadr blinds))))
-	       (opponents (1- (length (cl-remove-if-not #'poker-player-pocket
-							players))))
-	       (decision (poker-player-fcr (cadr blinds) (poker-pot players)
-					   amount-to-call board opponents)))
-	  (message "%s %S" (poker-player-name (cadr blinds)) decision)
-	  (cond
-	 ((eq decision 'call)
-	  (when (> amount-to-call 0)
-	    (poker-player-bet (cadr blinds) amount-to-call)))
-	 ((eq decision 'raise)
-	  (poker-player-bet (cadr blinds) (+ amount-to-call min-bet)))
-	 ((eq decision 'fold)
-	  (poker-player-fold (cadr blinds))))))
+	(poker-dealer-ask-player (cadr blinds) players board t))
 
       (poker-dealer min-bet deck board players)))
 
@@ -588,20 +601,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 		     (poker-rotate-to-first (cadr players) players)))
       (when (or (> (length (cl-remove-if-not #'poker-player-can-bet-p players)) 1)
 		(< (poker-player-wagered player) (poker-current-wager players)))
-	(let* ((amount-to-call (- (poker-current-wager players)
-				(poker-player-wagered player)))
-	     (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
-	     (decision (poker-player-fcr player (poker-pot players)
-					 amount-to-call board opponents)))
-	  (message "%s wants to %S" (poker-player-name player) decision)
-	  (cond
-	   ((eq decision 'call) (when (> amount-to-call 0)
-				  (poker-player-bet player amount-to-call)))
-	   ((eq decision 'raise)
-	    (message "No raise allowed, %s is calling." (poker-player-name player))
-	    (when (> amount-to-call 0)
-	      (poker-player-bet player amount-to-call)))
-	   ((eq decision 'fold) (poker-player-fold player))))))
+	(poker-dealer-ask-player player players board nil)))
 
     (poker-dealer min-bet deck board players))
 
@@ -614,20 +614,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
     (dolist (player (cl-remove-if-not #'poker-player-can-bet-p players))
       (when (or (> (length (cl-remove-if-not #'poker-player-can-bet-p players)) 1)
 		(< (poker-player-wagered player) (poker-current-wager players)))
-	(let* ((max-raise (poker-player-max-raise player players))
-	       (amount-to-call (- (poker-current-wager players)
-				  (poker-player-wagered player)))
-	       (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
-	       (decision (poker-player-fcr player (poker-pot players)
-					   amount-to-call board opponents)))
-	(message "%s %S" (poker-player-name player) decision)
-	(cond
-	 ((eq decision 'call) (when (> amount-to-call 0)
-				(poker-player-bet player amount-to-call)))
-	 ((eq decision 'raise)
-	  (message "%s raises by %d." (poker-player-name player) min-bet)
-	  (poker-player-bet player (min (+ amount-to-call min-bet) max-raise)))
-	 ((eq decision 'fold) (poker-player-fold player))))))
+	(poker-dealer-ask-player player players board t)))
 
     (poker-dealer min-bet deck board players))
 
@@ -645,20 +632,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 			   (= (poker-player-wagered player)
 			      (poker-current-wager players))))
 		     players))
-      (let* ((amount-to-call (- (poker-current-wager players)
-				(poker-player-wagered player)))
-	     (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
-	     (decision (poker-player-fcr player (poker-pot players)
-					 amount-to-call board opponents)))
-	(message "%s wants to %S" (poker-player-name player) decision)
-	(cond
-	 ((eq decision 'call) (when (> amount-to-call 0)
-				(poker-player-bet player amount-to-call)))
-	 ((eq decision 'raise)
-	  (message "No raise allowed, %s is calling." (poker-player-name player))
-	  (when (> amount-to-call 0)
-	    (poker-player-bet player amount-to-call)))
-	 ((eq decision 'fold) (poker-player-fold player)))))
+      (poker-dealer-ask-player player players board nil))
 
     (poker-dealer min-bet deck board players))
 
@@ -673,20 +647,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
     (dolist (player (cl-remove-if-not #'poker-player-can-bet-p players))
       (when (or (> (length (cl-remove-if-not #'poker-player-can-bet-p players)) 1)
 		(< (poker-player-wagered player) (poker-current-wager players)))
-	(let* ((max-raise (poker-player-max-raise player players))
-	       (amount-to-call (- (poker-current-wager players)
-				  (poker-player-wagered player)))
-	       (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
-	       (decision (poker-player-fcr player (poker-pot players)
-					   amount-to-call board opponents)))
-	  (message "%s %S" (poker-player-name player) decision)
-	  (cond
-	   ((eq decision 'call) (when (> amount-to-call 0)
-				  (poker-player-bet player amount-to-call)))
-	   ((eq decision 'raise)
-	    (message "%s raises by %d." (poker-player-name player) min-bet)
-	    (poker-player-bet player (min max-raise (+ amount-to-call min-bet))))
-	   ((eq decision 'fold) (poker-player-fold player))))))
+	(poker-dealer-ask-player player players board t)))
 
     (poker-dealer min-bet deck board players))
 
@@ -704,20 +665,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 			   (= (poker-player-wagered player)
 			      (poker-current-wager players))))
 		     players))
-      (let* ((amount-to-call (- (poker-current-wager players)
-				(poker-player-wagered player)))
-	     (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
-	     (decision (poker-player-fcr player (poker-pot players)
-					 amount-to-call board opponents)))
-	(message "%s wants to %S" (poker-player-name player) decision)
-	(cond
-	 ((eq decision 'call) (when (> amount-to-call 0)
-				(poker-player-bet player amount-to-call)))
-	 ((eq decision 'raise)
-	  (message "No raise allowed, %s is calling." (poker-player-name player))
-	  (when (> amount-to-call 0)
-	    (poker-player-bet player amount-to-call)))
-	 ((eq decision 'fold) (poker-player-fold player)))))
+      (poker-dealer-ask-player player players board nil))
 
     (poker-dealer min-bet deck board players))
 
@@ -729,20 +677,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
     (dolist (player (cl-remove-if-not #'poker-player-can-bet-p players))
       (when (or (> (length (cl-remove-if-not #'poker-player-can-bet-p players)) 1)
 		(< (poker-player-wagered player) (poker-current-wager players)))
-	(let* ((max-raise (poker-player-max-raise player players))
-	       (amount-to-call (- (poker-current-wager players)
-				  (poker-player-wagered player)))
-	       (opponents (1- (length (cl-remove-if-not #'poker-player-active-p players))))
-	     (decision (poker-player-fcr player (poker-pot players)
-					 amount-to-call board opponents)))
-	(message "%s %S" (poker-player-name player) decision)
-	(cond
-	 ((eq decision 'call) (when (> amount-to-call 0)
-				(poker-player-bet player amount-to-call)))
-	 ((eq decision 'raise)
-	  (message "%s raises by %d." (poker-player-name player) (min max-raise min-bet))
-	  (poker-player-bet player (+ amount-to-call min-bet)))
-	 ((eq decision 'fold) (poker-player-fold player))))))
+	(poker-dealer-ask-player player players board t)))
 
     (poker-dealer min-bet deck board players))
 
@@ -760,21 +695,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 			   (= (poker-player-wagered player)
 			      (poker-current-wager players))))
 		     players))
-      (let* ((amount-to-call (- (poker-current-wager players)
-				(poker-player-wagered player)))
-	     (opponents (1- (length (cl-remove-if-not #'poker-player-pocket
-						      players))))
-	     (decision (poker-player-fcr player (poker-pot players)
-					 amount-to-call board opponents)))
-	(message "%s wants to %S" (poker-player-name player) decision)
-	(cond
-	 ((eq decision 'call) (when (> amount-to-call 0)
-				(poker-player-bet player amount-to-call)))
-	 ((eq decision 'raise)
-	  (message "No raise allowed, %s is calling." (poker-player-name player))
-	  (when (> amount-to-call 0)
-	    (poker-player-bet player amount-to-call)))
-	 ((eq decision 'fold) (poker-player-fold player)))))
+      (poker-dealer-ask-player player players board nil))
 
     (poker-dealer min-bet deck board players))
 
@@ -782,7 +703,8 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
    ((= (length board) 5)
     (cl-assert (not (zerop (poker-pot players))))
     (let ((in-play (cl-remove-if-not #'poker-player-active-p players))
-	  (groups ()))
+	  (groups ())
+	  (game-interactive-p (poker-interactive-p players)))
       (unless (> (length in-play) 1)
 	(error "In-play to small: %S %S" in-play players))
       (while in-play
@@ -791,6 +713,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 	      (message "%s wins %d."
 		       (poker-player-name (car in-play))
 		       (poker-distribute-winnings in-play players))
+	      (when game-interactive-p (sit-for 2))
 	      (push in-play groups)
 	      (setq in-play nil))
 	  (let* ((best-hand-value (poker-hand-value
@@ -808,10 +731,12 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 	      (message "%s shows %s, %s."
 		       (poker-player-name player)
 		       (mapconcat #'poker-card-name (poker-player-pocket player) " ")
-		       (poker-describe-hand (poker-player-best-hand player board))))
+		       (poker-describe-hand (poker-player-best-hand player board)))
+	      (when game-interactive-p (sit-for 2)))
 	    (message "%s wins %d."
 		     (mapconcat #'poker-player-name winners ", ")
 		     (poker-distribute-winnings winners players))
+	    (when game-interactive-p (sit-for 2))
 	    (push winners groups))
 	  (setq in-play (cl-remove-if-not #'poker-player-active-p players))))
 
@@ -879,6 +804,8 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
       (accept-process-output))
 
     (cons players rounds)))
+
+;;; Tests:
 
 (ert-deftest poker-combinations ()
   (equal 21 (length (poker-combinations 5 (last poker-deck 7))))
