@@ -3,6 +3,7 @@
 ;; Copyright (C) 2014  Free Software Foundation, Inc.
 
 ;; Author: Mario Lang <mlang@delysid.org>
+;; Maintainer: Mario Lang <mlang@delysid.org>
 ;; Version: 0.1
 ;; Keywords: games
 
