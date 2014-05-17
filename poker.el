@@ -408,13 +408,20 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 	(map (let ((map (make-sparse-keymap)))
 	       (define-key map [?c] 'call)
 	       (define-key map [?f] 'fold)
-	       (define-key map [?r] 'raise)
+	       (when (> max-raise 0) (define-key map [?r] 'raise))
 	       (define-key map [?q] 'quit)
 	       map))
 	(action nil))
     (while (not action)
-      (message (format "%s%d in pot, %d to call: (f)old, (c)all or (r)aise? "
-		       (or prompt "") pot to-call))
+      (message (format "%s%d in pot, %d to call: (f)old%s: "
+		       (or prompt "") pot to-call
+		       (if (> max-raise 0)
+			   (if (zerop to-call)
+			       ", (c)heck or (r)aise"
+			     ", (c)all or (r)aise")
+			 (if (zerop to-call)
+			     " or (c)heck"
+			   " or (c)all"))))
       (setq action (lookup-key map (vector (read-event)))))
     (cond
      ((eq action 'fold) nil)
@@ -429,7 +436,12 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 
 (defun poker-interactive-fcr (player pot due max-raise board opponents)
   (poker-read-fold-call-raise
-   pot due max-raise (format "%d stack, " (poker-player-stack player))))
+   pot due max-raise (format "%s%s, %d stack, "
+			     (mapconcat #'poker-card-name (poker-player-pocket player) ", ")
+			     (if board
+				 (concat "(" (mapconcat #'poker-card-name board " ") ")")
+			       "")
+			     (poker-player-stack player))))
 
 (defun poker-automatic-fcr (player pot due max-raise board &optional opponents)
   (let* ((strength (poker-strength (poker-player-pocket player) board opponents))
@@ -763,11 +775,14 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
   (dolist (player players)
     (message "%s receives %d chips." (poker-player-name player) initial-stack)
     (setcdr (assq 'stack player) initial-stack))
-  (let ((button-player (nth (random (length players)) players))
+  (let ((game-interactive-p (poker-interactive-p players))
+	(button-player (nth (random (length players)) players))
 	(rounds ())
 	(losers ()))
     (setq players (poker-rotate-to-first button-player players))
-    (while button-player
+    (while (and button-player
+		(or (not game-interactive-p)
+		    (poker-interactive-p players)))
       (message "Round %d, %d players." (1+ (length rounds)) (length players))
 
       (push (poker-dealer min-bet (poker-random-deck) () players)
@@ -801,7 +816,18 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 	  (setq players (poker-rotate-to-first button-player players))
 	  (cl-assert (= count (length players)))))
 
-      (accept-process-output))
+      (accept-process-output)
+
+      (when (and game-interactive-p (not (poker-interactive-p players)))
+	(message "You drop out as %s player."
+		 (let ((rank (1+ (length players))))
+		   (pcase rank
+		     (2 "2nd")
+		     (3 "3rd")
+		     (n (format "%dth" n)))))))
+
+    (when (and game-interactive-p (poker-interactive-p players))
+      (message "You are the winner."))
 
     (cons players rounds)))
 
