@@ -348,10 +348,6 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
   "Make PLAYER bet AMOUNT of chips."
   (let ((actual (min (poker-player-stack player) amount)))
     (when (zerop actual) (message "WARNING: Actual is 0."))
-    (message "%s: %d - %d == %d"
-	     (poker-player-name player)
-	     (poker-player-stack player) actual
-	     (- (poker-player-stack player) actual))
     (unless (zerop actual)
       (cl-decf (cdr (assq 'stack player)) actual)
       (cl-incf (cdr (assq 'wagered player)) actual))
@@ -397,6 +393,24 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 
 (defun poker-player-fcr (player pot due board opponents)
   (funcall (poker-player-fcr-fn player) player pot due board opponents))
+
+(defun poker-read-fold-call-raise (pot to-call &optional prompt)
+  (let ((cursor-in-echo-area t)
+	(map (let ((map (make-sparse-keymap)))
+	       (define-key map [?c] 'call)
+	       (define-key map [?f] 'fold)
+	       (define-key map [?r] 'raise)
+	       (define-key map [?q] 'quit)
+	       map))
+	(action nil))
+    (while (not action)
+      (message (format "%s%d in pot, %d to call: (f)old, (c)all or (r)aise? "
+		       (or prompt "") pot to-call))
+      (setq action (lookup-key map (vector (read-event)))))
+    (cond
+     ((eq action 'fold) nil)
+     ((eq action 'call) to-call)
+     ((eq action 'raise) (+ to-call (read-number "Raise by? "))))))
 
 (defun poker-interactive-fcr (player pot due board opponents)
   (let ((char nil))
