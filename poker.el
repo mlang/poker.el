@@ -833,14 +833,14 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 ;;; Tests:
 
 (ert-deftest poker-combinations ()
-  (equal 21 (length (poker-combinations 5 (last poker-deck 7))))
-  (equal 1326 (length (poker-combinations 2 poker-deck))))
+  (should (equal 21 (length (poker-combinations 5 (last poker-deck 7)))))
+  (should (equal 1326 (length (poker-combinations 2 poker-deck)))))
 
 (ert-deftest poker-possible-hands ()
-  (equal (poker-possible-hands '(1 2 3 4 5 6 7))
-	 (poker-combinations 5 '(1 2 3 4 5 6 7)))
-  (equal (poker-possible-hands '(1 2 3 4 5 6))
-	 (poker-combinations 5 '(1 2 3 4 5 6))))
+  (should (equal (poker-possible-hands '(1 2 3 4 5 6 7))
+	 (poker-combinations 5 '(1 2 3 4 5 6 7))))
+  (should (equal (poker-possible-hands '(1 2 3 4 5 6))
+	 (poker-combinations 5 '(1 2 3 4 5 6)))))
 
 (ert-deftest poker ()
   (let ((players (list (poker-make-player "Angela" #'poker-automatic-fcr)
