@@ -244,7 +244,7 @@ RANK is one of `poker-ranks' and SUIT is one of `poker-suits'."
   (+ (* (cl-position suit poker-suits) 13) (cl-position rank poker-ranks)))
 
 (defsubst poker-card-rank (card)
-  "The rank (a integer from 0 to 12) of a poker CARD."
+  "The rank (an integer from 0 to 12) of a poker CARD."
   (cl-check-type card (integer 0 51))
   (% card 13))
 
@@ -425,7 +425,7 @@ HAND is a list of 5 poker cards."
 					   (poker-rank-to-plural-string three)
 					   (poker-rank-to-string high)
 					   (poker-rank-to-string kicker)))
-    (`(2 ,two1 ,two2 ,high 0 0) (format "wwo pairs of %s and %s, %s high"
+    (`(2 ,two1 ,two2 ,high 0 0) (format "two pairs of %s and %s, %s high"
 				    (poker-rank-to-plural-string two1)
 				    (poker-rank-to-plural-string two2)
 				    (poker-rank-to-string high)))
@@ -920,7 +920,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 	  (groups ())
 	  (game-interactive-p (poker-interactive-p players)))
       (unless (> (length in-play) 1)
-	(error "In-play to small: %S %S" in-play players))
+	(error "In-play too small: %S %S" in-play players))
       (while in-play
 	(if (= (length in-play) 1)
 	    (progn
