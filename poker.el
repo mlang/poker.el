@@ -1120,5 +1120,83 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 		     (* 1000 (length players))))
       (setq players (cdr players)))))
 
+;;;; ChangeLog:
+
+;; 2019-01-31  Jean-Christophe Helary <jean.christophe.helary@gmail.com>
+;;
+;;      add (l)eave code to leave the table (replaces the 'quit action)
+;;
+;;      add visual enhancements to readability (line breaks, indentation, etc.)
+;;
+;;      putt the game in its own buffer, one new buffer per game
+;;
+;; 2016-08-11  Mario Lang	<mlang@delysid.org>
+;; 
+;; 	[poker] Version 0.2, update copyright years and add todo
+;; 
+;; 2016-08-06  Mario Lang	<mlang@delysid.org>
+;; 
+;; 	Set default number of iterations to 300
+;; 
+;; 	Accidentally set too high in previous commit.
+;; 
+;; 2016-08-06  Mario Lang	<mlang@delysid.org>
+;; 
+;; 	Add a pre-flop hand strength table and an ert test for poker-hand-value
+;; 
+;; 	Precalculated pre-flop starting hand values with 1^6 iterations. Adjust
+;; 	`poker-strength' to use them when appropriate.
+;; 
+;; 2016-08-05  Mario Lang	<mlang@delysid.org>
+;; 
+;; 	Improve performance of poker-hand-value by a factor of 4
+;; 
+;; 	`cl-count' is unnecessarily expensive, as it at least uses `length' and
+;; 	`nthcdr' which we really don't need in this performance cricital code
+;; 	path. Rewriting it without `cl-count' turns up another opportunity to
+;; 	speed up, as we actually don't need to check the whole list to count
+;; 	occurances of unique elements.	For one, we can start counting from 1
+;; 	(not 0) if we encounter the first element, and we only need to check the
+;; 	rest of the list of cards.  Also, stop using `mapcar' with
+;; 	`poker-card-rank' to allow it to actually be inlined.  This turns out to
+;; 	make poker-hand-value
+;; 	*a lot* faster. Mission accomplished.
+;; 
+;; 2016-08-04  Mario Lang	<mlang@delysid.org>
+;; 
+;; 	Improve poker-hand-value performance by 25%
+;; 
+;; 	Avoid unnecessary calls to poker-card-suit in flush check.
+;; 
+;; 2016-08-02  Mario Lang	<mlang@delysid.org>
+;; 
+;; 	Very slightly improve performance
+;; 
+;; 	* packages/poker/poker.el (poker-hand-value): Use `delete-dups' instead
+;; 	of
+;; 	`cl-delete-duplicates' and avoid an unnecessary call to `ash'.
+;; 
+;; 2016-07-11  Paul Eggert	 <eggert@cs.ucla.edu>
+;; 
+;; 	Fix some quoting problems in doc strings
+;; 
+;; 	Most of these are minor issues involving, e.g., quoting `like this'
+;; 	instead of 'like this'.	 A few involve escaping ` and ' with a preceding
+;; 	\= when the characters should not be turned into curved single quotes.
+;; 
+;; 2014-10-15  Stefan Monnier  <monnier@iro.umontreal.ca>
+;; 
+;; 	* poker/poker.el (poker-combinations, poker-possible-hands): Fix tests.
+;; 
+;; 2014-06-18  Mario Lang	<mlang@delysid.org>
+;; 
+;; 	[poker] Add to the games menu.
+;; 
+;; 2014-05-18  Mario Lang	<mlang@delysid.org>
+;; 
+;; 	Add new simple package poker.el.
+;; 
+
+
 (provide 'poker)
 ;;; poker.el ends here
