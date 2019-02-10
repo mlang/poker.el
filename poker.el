@@ -258,7 +258,7 @@ RANK is one of `poker-ranks' and SUIT is one of `poker-suits'."
   (cl-check-type card (integer 0 51))
   (concat (aref ["2" "3" "4" "5" "6" "7" "8" "9" "T" "J" "Q" "K" "A"]
 		(poker-card-rank card))
-	  (aref ["c" "d" "h" "s"] (poker-card-suit card))))
+	  (aref ["♣" "♦" "♥" "♠"] (poker-card-suit card))))
 
 (defun poker-card-unicode (card)
   "The Unicode character for a poker CARD."
