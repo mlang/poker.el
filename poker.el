@@ -30,6 +30,11 @@
 ;;   the state and visual representation of a table/game.
 ;; * Smarter AIs.
 
+;; * Limit available actions when pressing keys
+;; * Allow to start a new game after dropping
+;; * Fontify the strings
+;; * Prettify display: create a real poker table ?
+
 ;;; Requires:
 
 (require 'cl-lib)
