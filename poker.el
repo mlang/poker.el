@@ -36,6 +36,16 @@
 (require 'cookie1)
 (require 'ert)
 
+;;; Faces:
+
+(setq poker-highlights
+      '(("raises\\|folds\\|calls\\|checks" . font-lock-function-name-face)
+        ("wins\\|drops" . font-lock-constant-face)))
+
+(define-derived-mode mypoker-mode fundamental-mode "poker"
+  "major mode for editing poker language code."
+  (setq font-lock-defaults '(poker-highlights)))
+
 ;;; Compatibility:
 
 (eval-and-compile
