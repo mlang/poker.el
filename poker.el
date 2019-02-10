@@ -611,7 +611,8 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 	       (define-key map [?c] 'call)
 	       (define-key map [?f] 'fold)
 	       (when (> max-raise 0) (define-key map [?r] 'raise))
-	       (define-key map [?q] 'quit)
+	       (define-key map [?l] 'leave)
+	       (define-key map [?q] 'leave)
 	       map))
 	(action nil))
     (while (not action)
@@ -631,10 +632,13 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
      ((eq action 'raise) (+ to-call (let ((raise (1+ max-raise)))
 				      (while (> raise max-raise)
 					(setq raise
-					      (read-number (format "Raise by (max %d): "
+					      (read-number (message "Raise by (max %d): "
 								   max-raise))))
 				      (cl-check-type raise integer)
-				      raise))))))
+				      raise)))
+     ((eq action 'leave) (progn
+			  (insert "\nYou have left the table.\n")
+			  (signal 'quit nil))))))
 
 (defun poker-interactive-fcr (player pot due max-raise board opponents)
   (poker-read-fold-call-raise
