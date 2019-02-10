@@ -615,7 +615,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 	       map))
 	(action nil))
     (while (not action)
-      (message (format "%s%d in pot, %d to call: (f)old%s: "
+      (message "   %s %d in pot, %d to call\n   (f)old%s: \n"
 		       (or prompt "") pot to-call
 		       (if (> max-raise 0)
 			   (if (zerop to-call)
@@ -623,7 +623,7 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 			     ", (c)all or (r)aise")
 			 (if (zerop to-call)
 			     " or (c)heck"
-			   " or (c)all"))))
+			   " or (c)all")))
       (setq action (lookup-key map (vector (read-event)))))
     (cond
      ((eq action 'fold) nil)
@@ -638,10 +638,10 @@ FCR-FN specifies a function to use when a fold-call-raise decision is required."
 
 (defun poker-interactive-fcr (player pot due max-raise board opponents)
   (poker-read-fold-call-raise
-   pot due max-raise (format "%s%s, %d stack, "
+   pot due max-raise (format "%s%s\n   %d stack,"
 			     (mapconcat #'poker-card-name (poker-player-pocket player) ", ")
 			     (if board
-				 (concat "(" (mapconcat #'poker-card-name board " ") ")")
+				 (concat " (" (mapconcat #'poker-card-name board " ") ")")
 			       "")
 			     (poker-player-stack player))))
 
